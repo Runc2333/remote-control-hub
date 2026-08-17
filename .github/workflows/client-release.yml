@@ -65,8 +65,8 @@ jobs:
       - name: Build Windows components
         shell: pwsh
         run: |
-          pnpm --filter @remote-control-hub/agent-session build
-          cargo build --manifest-path agent/Cargo.toml --workspace --locked --release
+          cargo build --manifest-path agent/Cargo.toml --workspace --exclude agent-session --locked --release
+          pnpm --filter @remote-control-hub/agent-session exec tauri build --no-bundle
           Copy-Item -LiteralPath "agent/target/release/agent-service.exe" -Destination "artifacts/components/agent-service.exe"
           Copy-Item -LiteralPath "agent/target/release/agent-session.exe" -Destination "artifacts/components/agent-session.exe"
           Copy-Item -LiteralPath "agent/target/release/agent-bootstrapper.exe" -Destination "artifacts/components/agent-bootstrapper.exe"

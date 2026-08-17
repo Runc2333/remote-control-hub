@@ -22,7 +22,8 @@ fn run() -> Result<(), &'static str> {
     let installer_path = arguments
         .get(1)
         .map(PathBuf::from)
-        .unwrap_or_else(|| release_directory.join("remote-control-hub-agent.msi"));
+        .map(Ok)
+        .unwrap_or_else(|| find_installer(release_directory))?;
     let installer = installer_path
         .canonicalize()
         .map_err(|_| "installer_not_found")?;
@@ -30,7 +31,38 @@ fn run() -> Result<(), &'static str> {
         return Err("installer_path_invalid");
     }
     ensure_webview2(release_directory)?;
-    windows_platform::install_msi(&installer)
+    windows_platform::install_msi(&installer)?;
+    windows_platform::launch_agent_session()
+}
+
+fn find_installer(release_directory: &std::path::Path) -> Result<PathBuf, &'static str> {
+    let default_installer = release_directory.join("remote-control-hub-agent.msi");
+    if default_installer.is_file() {
+        return Ok(default_installer);
+    }
+    let mut candidates = std::fs::read_dir(release_directory)
+        .map_err(|_| "installer_not_found")?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let file_type = entry.file_type().ok()?;
+            let file_name = entry.file_name();
+            let file_name = file_name.to_str()?;
+            if file_type.is_file()
+                && file_name.starts_with("remote-control-hub-agent-")
+                && file_name.ends_with(".msi")
+            {
+                Some(entry.path())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    candidates.sort();
+    match candidates.as_slice() {
+        [installer] => Ok(installer.clone()),
+        [] => Err("installer_not_found"),
+        _ => Err("multiple_installers_found"),
+    }
 }
 
 fn ensure_webview2(release_directory: &std::path::Path) -> Result<(), &'static str> {
@@ -81,5 +113,44 @@ fn main() -> ExitCode {
             let _ = windows_platform::show_agent_error(error);
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_installer;
+
+    #[test]
+    fn finds_the_only_versioned_installer() {
+        let directory = std::env::temp_dir().join(format!(
+            "remote-control-hub-bootstrapper-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let installer = directory.join("remote-control-hub-agent-0.1.2-unsigned.msi");
+        std::fs::write(&installer, []).unwrap();
+        assert_eq!(find_installer(&directory).unwrap(), installer);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn rejects_ambiguous_versioned_installers() {
+        let directory = std::env::temp_dir().join(format!(
+            "remote-control-hub-bootstrapper-ambiguous-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("remote-control-hub-agent-0.1.3-unsigned.msi"),
+            [],
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join("remote-control-hub-agent-0.1.2-unsigned.msi"),
+            [],
+        )
+        .unwrap();
+        assert_eq!(find_installer(&directory), Err("multiple_installers_found"));
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

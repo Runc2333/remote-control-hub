@@ -7,7 +7,10 @@
     UpgradeCode="B7BD57A2-88CB-4ED9-924B-94BCF74EDCF3"
     Scope="perMachine"
   >
-    <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 Remote Control Hub Agent。" />
+    <MajorUpgrade
+      AllowSameVersionUpgrades="yes"
+      DowngradeErrorMessage="已安装更新版本的 Remote Control Hub Agent。"
+    />
     <MediaTemplate EmbedCab="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
@@ -41,7 +44,16 @@
           Id="AgentSessionComponent"
           Guid="E63B6A4A-708F-4B8B-BE47-29C0DF9BB4C4"
         >
-          <File Id="AgentSessionExe" Source="$(var.AgentSessionPath)" KeyPath="yes" />
+          <File Id="AgentSessionExe" Source="$(var.AgentSessionPath)" KeyPath="yes">
+            <Shortcut
+              Id="AgentStartMenuShortcut"
+              Advertise="yes"
+              Directory="ProgramMenuFolder"
+              Name="Remote Control Hub Agent"
+              Description="打开 Remote Control Hub Agent"
+              WorkingDirectory="INSTALLFOLDER"
+            />
+          </File>
           <RegistryValue
             Root="HKLM"
             Key="Software\Microsoft\Windows\CurrentVersion\Run"

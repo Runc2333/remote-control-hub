@@ -57,7 +57,7 @@ const manifest = {
   releaseId,
   resources,
   totalBytes,
-  version: process.env.npm_package_version ?? "0.1.1",
+  version: process.env.npm_package_version ?? "0.1.2",
   workerCompatibility: { maximum: 1, minimum: 1 },
 };
 

@@ -7,4 +7,4 @@ rust-version.workspace = true
 
 [dependencies]
 sha2 = "0.11.0"
-windows-platform = { version = "0.1.1", path = "../../crates/windows-platform" }
+windows-platform = { version = "0.1.2", path = "../../crates/windows-platform" }

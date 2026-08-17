@@ -333,6 +333,7 @@ pub fn install_msi(installer_path: &std::path::Path) -> Result<(), &'static str>
     };
     use windows::core::HSTRING;
 
+    let installer_path = windows_installer_path(installer_path);
     let path = HSTRING::from(installer_path.as_os_str());
     let properties = HSTRING::from("REBOOT=ReallySuppress");
     unsafe {
@@ -350,6 +351,67 @@ pub fn install_msi(installer_path: &std::path::Path) -> Result<(), &'static str>
     } else {
         Err("windows_installer_failed")
     }
+}
+
+#[cfg(windows)]
+fn windows_installer_path(path: &std::path::Path) -> std::path::PathBuf {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+    const VERBATIM_PREFIX: &[u16] = &[b'\\' as u16, b'\\' as u16, b'?' as u16, b'\\' as u16];
+    const VERBATIM_UNC_PREFIX: &[u16] = &[
+        b'\\' as u16,
+        b'\\' as u16,
+        b'?' as u16,
+        b'\\' as u16,
+        b'U' as u16,
+        b'N' as u16,
+        b'C' as u16,
+        b'\\' as u16,
+    ];
+
+    let encoded = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    if let Some(network_path) = encoded.strip_prefix(VERBATIM_UNC_PREFIX) {
+        let mut normalized = vec![b'\\' as u16, b'\\' as u16];
+        normalized.extend_from_slice(network_path);
+        std::ffi::OsString::from_wide(&normalized).into()
+    } else if let Some(local_path) = encoded.strip_prefix(VERBATIM_PREFIX) {
+        std::ffi::OsString::from_wide(local_path).into()
+    } else {
+        path.to_owned()
+    }
+}
+
+#[cfg(windows)]
+pub fn launch_agent_session() -> Result<(), &'static str> {
+    use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
+
+    let command = read_registry_string(
+        HKEY_LOCAL_MACHINE,
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
+        "RemoteControlHubAgent",
+    )?
+    .ok_or("agent_session_installation_missing")?;
+    let executable = quoted_executable_path(&command).ok_or("agent_session_path_invalid")?;
+    let executable = std::path::PathBuf::from(executable)
+        .canonicalize()
+        .map_err(|_| "agent_session_path_invalid")?;
+    if executable.file_name().and_then(|value| value.to_str()) != Some("agent-session.exe") {
+        return Err("agent_session_path_invalid");
+    }
+    std::process::Command::new(executable)
+        .spawn()
+        .map_err(|_| "agent_session_start_failed")?;
+    Ok(())
+}
+
+fn quoted_executable_path(command: &str) -> Option<&str> {
+    let command = command.trim();
+    let remainder = command.strip_prefix('"')?;
+    let closing_quote = remainder.find('"')?;
+    if !remainder[closing_quote + 1..].trim().is_empty() {
+        return None;
+    }
+    Some(&remainder[..closing_quote])
 }
 
 #[cfg(windows)]
@@ -596,6 +658,11 @@ pub fn install_msi(_installer_path: &std::path::Path) -> Result<(), &'static str
     Err("unsupported_platform")
 }
 
+#[cfg(not(windows))]
+pub fn launch_agent_session() -> Result<(), &'static str> {
+    Err("unsupported_platform")
+}
+
 #[cfg(windows)]
 pub fn protect_machine_secret(secret: &[u8]) -> Result<Vec<u8>, &'static str> {
     use std::ffi::c_void;
@@ -679,21 +746,27 @@ impl DesktopControl for PlatformDesktopControl {
             APPCOMMAND_VOLUME_MUTE, APPCOMMAND_VOLUME_UP,
         };
         use windows::Win32::UI::WindowsAndMessaging::{
-            HWND_BROADCAST, SC_MONITORPOWER, SendMessageW, WM_APPCOMMAND, WM_SYSCOMMAND,
+            GetShellWindow, HWND_BROADCAST, PostMessageW, SC_MONITORPOWER, SendMessageW,
+            WM_APPCOMMAND, WM_SYSCOMMAND,
         };
 
-        fn send_app_command(command: u32) {
-            unsafe {
-                SendMessageW(
-                    HWND_BROADCAST,
-                    WM_APPCOMMAND,
-                    Some(WPARAM(0)),
-                    Some(LPARAM((command as isize) << 16)),
-                );
+        fn post_app_command(command: u32) -> bool {
+            let shell_window = unsafe { GetShellWindow() };
+            if shell_window.is_invalid() {
+                return false;
             }
+            unsafe {
+                PostMessageW(
+                    Some(shell_window),
+                    WM_APPCOMMAND,
+                    WPARAM(0),
+                    LPARAM((command as isize) << 16),
+                )
+            }
+            .is_ok()
         }
 
-        match command {
+        let dispatched = match command {
             DesktopCommand::DisplayTurnOff => unsafe {
                 SendMessageW(
                     HWND_BROADCAST,
@@ -701,21 +774,67 @@ impl DesktopControl for PlatformDesktopControl {
                     Some(WPARAM(SC_MONITORPOWER as usize)),
                     Some(LPARAM(2)),
                 );
+                true
             },
-            DesktopCommand::MediaVolumeUp => send_app_command(APPCOMMAND_VOLUME_UP.0),
-            DesktopCommand::MediaVolumeDown => send_app_command(APPCOMMAND_VOLUME_DOWN.0),
-            DesktopCommand::MediaVolumeMuteToggle => send_app_command(APPCOMMAND_VOLUME_MUTE.0),
-            DesktopCommand::MediaPlayPause => send_app_command(APPCOMMAND_MEDIA_PLAY_PAUSE.0),
+            DesktopCommand::MediaVolumeUp => post_app_command(APPCOMMAND_VOLUME_UP.0),
+            DesktopCommand::MediaVolumeDown => post_app_command(APPCOMMAND_VOLUME_DOWN.0),
+            DesktopCommand::MediaVolumeMuteToggle => post_app_command(APPCOMMAND_VOLUME_MUTE.0),
+            DesktopCommand::MediaPlayPause => post_app_command(APPCOMMAND_MEDIA_PLAY_PAUSE.0),
             DesktopCommand::MediaPreviousTrack => {
-                send_app_command(APPCOMMAND_MEDIA_PREVIOUSTRACK.0)
+                post_app_command(APPCOMMAND_MEDIA_PREVIOUSTRACK.0)
             }
-            DesktopCommand::MediaNextTrack => send_app_command(APPCOMMAND_MEDIA_NEXTTRACK.0),
-            DesktopCommand::MediaStop => send_app_command(APPCOMMAND_MEDIA_STOP.0),
-        }
+            DesktopCommand::MediaNextTrack => post_app_command(APPCOMMAND_MEDIA_NEXTTRACK.0),
+            DesktopCommand::MediaStop => post_app_command(APPCOMMAND_MEDIA_STOP.0),
+        };
 
         ExecutionReceipt {
-            dispatched: true,
-            error_code: None,
+            dispatched,
+            error_code: (!dispatched).then_some("execution_failed"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quoted_executable_path;
+
+    #[cfg(windows)]
+    use super::windows_installer_path;
+
+    #[cfg(windows)]
+    #[test]
+    fn removes_verbatim_prefixes_from_windows_installer_paths() {
+        assert_eq!(
+            windows_installer_path(std::path::Path::new(
+                r"\\?\C:\Users\tester\Remote Control Hub Agent.msi"
+            )),
+            std::path::PathBuf::from(r"C:\Users\tester\Remote Control Hub Agent.msi")
+        );
+        assert_eq!(
+            windows_installer_path(std::path::Path::new(
+                r"\\?\UNC\server\share\Remote Control Hub Agent.msi"
+            )),
+            std::path::PathBuf::from(r"\\server\share\Remote Control Hub Agent.msi")
+        );
+    }
+
+    #[test]
+    fn parses_the_installed_session_run_value() {
+        assert_eq!(
+            quoted_executable_path(
+                r#""C:\Program Files\Remote Control Hub Agent\agent-session.exe""#
+            ),
+            Some(r"C:\Program Files\Remote Control Hub Agent\agent-session.exe")
+        );
+    }
+
+    #[test]
+    fn rejects_run_values_with_arguments() {
+        assert_eq!(
+            quoted_executable_path(
+                r#""C:\Program Files\Remote Control Hub Agent\agent-session.exe" --unexpected"#
+            ),
+            None
+        );
     }
 }

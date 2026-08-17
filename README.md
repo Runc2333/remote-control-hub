@@ -3,7 +3,7 @@
 Remote Control Hub 是一个面向多用户的自托管 Windows 设备远程控制平台。它由 Web 管理端、Fastify 服务端以及 Windows Agent 组成，通过明确的命令白名单提供关闭显示器、系统音量和媒体播放控制，而不暴露任意命令执行、远程桌面或文件传输能力。
 
 > [!IMPORTANT]
-> 当前版本为 `0.1.1`，适合开发、集成测试和受控环境验证。正式部署前仍需准备域名、TLS、数据库备份、干净 Windows 虚拟机和真实硬件验收环境。Windows 发行物不进行 Authenticode 签名，安装时可能出现“未知发布者”或 SmartScreen 警告。
+> 当前版本为 `0.1.2`，适合开发、集成测试和受控环境验证。正式部署前仍需准备域名、TLS、数据库备份、干净 Windows 虚拟机和真实硬件验收环境。Windows 发行物不进行 Authenticode 签名，安装时可能出现“未知发布者”或 SmartScreen 警告。
 
 ## 目录
 
