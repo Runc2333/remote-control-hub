@@ -4,7 +4,7 @@
   "scripts": {
     "test": "pnpm -r --if-present test && cargo test --manifest-path agent/Cargo.toml --workspace --locked",
     "prepare": "husky",
-    "lint": "eslint . --max-warnings=0 && cargo fmt --manifest-path agent/Cargo.toml --all -- --check && cargo clippy --manifest-path agent/Cargo.toml --workspace --all-targets --locked -- -D warnings",
+    "lint": "pnpm version:check && eslint . --max-warnings=0 && cargo fmt --manifest-path agent/Cargo.toml --all -- --check && cargo clippy --manifest-path agent/Cargo.toml --workspace --all-targets --locked -- -D warnings",
     "typecheck": "tsc -b",
     "build": "pnpm -r --if-present build && cargo build --manifest-path agent/Cargo.toml --workspace --locked",
     "format:check": "prettier --check . && cargo fmt --manifest-path agent/Cargo.toml --all -- --check",
@@ -13,7 +13,9 @@
     "pwa:check": "node scripts/verify-pwa.mjs",
     "icons:generate": "node scripts/generate-icon-source.mjs && pnpm --filter @remote-control-hub/agent-session tauri icon ../../../assets/app-icon.svg --output src-tauri/icons",
     "icons:check": "pnpm icons:generate && node scripts/verify-icons.mjs && git diff --exit-code -- assets apps/web/public/icons agent/apps/agent-session/src-tauri/icons",
-    "licenses:check": "node scripts/check-npm-licenses.mjs"
+    "licenses:check": "node scripts/check-npm-licenses.mjs",
+    "version:sync": "node scripts/version.mjs --write",
+    "version:check": "node scripts/version.mjs --check"
   },
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@10.30.3",

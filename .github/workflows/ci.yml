@@ -76,10 +76,26 @@ jobs:
         shell: pwsh
         run: |
           dotnet tool restore
-          cargo build --manifest-path agent/Cargo.toml --workspace --locked --release --target x86_64-pc-windows-msvc
-          $metadata = cargo metadata --manifest-path agent/Cargo.toml --locked --no-deps --format-version 1 | ConvertFrom-Json
-          $version = ($metadata.packages | Where-Object name -eq "agent-service").version
+          pnpm version:check
+          $version = (Get-Content -LiteralPath "VERSION" -Raw).Trim()
+          cargo build --manifest-path agent/Cargo.toml --workspace --exclude agent-session --exclude agent-bootstrapper --locked --release --target x86_64-pc-windows-msvc
+          pnpm --filter @remote-control-hub/agent-session exec tauri build --no-bundle --target x86_64-pc-windows-msvc
           $service = (Resolve-Path -LiteralPath "agent/target/x86_64-pc-windows-msvc/release/agent-service.exe").Path
           $session = (Resolve-Path -LiteralPath "agent/target/x86_64-pc-windows-msvc/release/agent-session.exe").Path
-          dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$version" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -out "agent/target/x86_64-pc-windows-msvc/release/remote-control-hub-agent.msi"
-          dotnet tool run wix -- msi validate -acceptEula wix7 "agent/target/x86_64-pc-windows-msvc/release/remote-control-hub-agent.msi"
+          $msi = "agent/target/x86_64-pc-windows-msvc/release/remote-control-hub-agent.msi"
+          dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$version" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -out $msi
+          dotnet tool run wix -- msi validate -acceptEula wix7 $msi
+          $webView2 = "agent/target/x86_64-pc-windows-msvc/release/MicrosoftEdgeWebview2Setup.exe"
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $webView2
+          $signature = Get-AuthenticodeSignature -LiteralPath $webView2
+          if ($signature.Status -ne "Valid" -or $signature.SignerCertificate.Subject -notmatch "Microsoft Corporation") {
+            throw "The WebView2 Bootstrapper signature is invalid."
+          }
+          $env:RCH_EMBEDDED_MSI_PATH = (Resolve-Path -LiteralPath $msi).Path
+          $env:RCH_EMBEDDED_WEBVIEW2_PATH = (Resolve-Path -LiteralPath $webView2).Path
+          cargo build --manifest-path agent/Cargo.toml --package agent-bootstrapper --locked --release --target x86_64-pc-windows-msvc
+          $installer = "agent/target/x86_64-pc-windows-msvc/release/agent-bootstrapper.exe"
+          & $installer --verify-bundle
+          if ($LASTEXITCODE -ne 0) {
+            throw "The self-contained installer payload verification failed."
+          }

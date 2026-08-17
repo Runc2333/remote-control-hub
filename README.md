@@ -3,7 +3,7 @@
 Remote Control Hub 是一个面向多用户的自托管 Windows 设备远程控制平台。它由 Web 管理端、Fastify 服务端以及 Windows Agent 组成，通过明确的命令白名单提供关闭显示器、系统音量和媒体播放控制，而不暴露任意命令执行、远程桌面或文件传输能力。
 
 > [!IMPORTANT]
-> 当前版本为 `0.1.2`，适合开发、集成测试和受控环境验证。正式部署前仍需准备域名、TLS、数据库备份、干净 Windows 虚拟机和真实硬件验收环境。Windows 发行物不进行 Authenticode 签名，安装时可能出现“未知发布者”或 SmartScreen 警告。
+> 当前版本适合开发、集成测试和受控环境验证。正式部署前仍需准备域名、TLS、数据库备份、干净 Windows 虚拟机和真实硬件验收环境。Windows 发行物不进行 Authenticode 签名，安装时可能出现“未知发布者”或 SmartScreen 警告。
 
 ## 目录
 
@@ -371,9 +371,9 @@ Compose 只把服务暴露在 `http://127.0.0.1:51692`，不会监听公网 80/4
 
 ### 未签名 Windows 发布
 
-项目不配置 Windows 代码签名证书，也不需要 `code-signing` Environment、PFX Secret 或时间戳服务。`v*` 标签仍会构建 MSI 和 Bootstrapper，并把未签名安装器、WebView2 Bootstrapper、许可清单、构建元数据和 `SHA256SUMS` 作为独立文件发布，同时生成 GitHub provenance。
+项目不配置 Windows 代码签名证书，也不需要 `code-signing` Environment、PFX Secret 或时间戳服务。`v*` 标签会把 MSI 和微软签名的 WebView2 Bootstrapper 嵌入未签名的单文件安装程序，并只发布这个 Setup EXE，同时生成 GitHub provenance。
 
-GitHub Release、产物文件名、`UNSIGNED_BUILD.txt` 和 `build-metadata.json` 都会明确标记产物未签名。用户应只从本仓库 Release 页面下载并在安装前核对 `SHA256SUMS`。Windows 可能显示“未知发布者”或 Microsoft Defender SmartScreen 警告，企业应用控制策略也可能拒绝运行未签名程序。
+GitHub Release 和产物文件名都会明确标记产物未签名。发布说明包含该 EXE 的 SHA-256，用户应只从本仓库 Release 页面下载并在安装前核对。Windows 可能显示“未知发布者”或 Microsoft Defender SmartScreen 警告，企业应用控制策略也可能拒绝运行未签名程序。
 
 WebView2 Bootstrapper 是独立的微软发行物。工作流仍校验该文件的 Microsoft Authenticode 签名和 SHA-256，再把摘要注入 Agent Bootstrapper；这不代表 Remote Control Hub 自身经过代码签名。
 

@@ -4,6 +4,9 @@ import { relative, resolve, sep } from "node:path";
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..");
 const DISTRIBUTION_DIRECTORY = resolve(REPOSITORY_ROOT, "apps/web/dist");
+const PRODUCT_VERSION = (
+  await readFile(resolve(REPOSITORY_ROOT, "VERSION"), "utf8")
+).trim();
 const MAX_RESOURCES = 256;
 const MAX_RESOURCE_BYTES = 8 * 1024 * 1024;
 const MAX_RELEASE_BYTES = 32 * 1024 * 1024;
@@ -57,7 +60,7 @@ const manifest = {
   releaseId,
   resources,
   totalBytes,
-  version: process.env.npm_package_version ?? "0.1.2",
+  version: PRODUCT_VERSION,
   workerCompatibility: { maximum: 1, minimum: 1 },
 };
 

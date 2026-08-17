@@ -7,6 +7,7 @@ api/schemas/
 agent/apps/agent-session/src-tauri/icons/
 apps/web/public/icons/
 plans/
+VERSION
 deploy/Caddyfile
 deploy/redis/redis.conf
 agent/installer/wix/Package.wxs

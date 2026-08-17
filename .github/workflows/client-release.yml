@@ -24,18 +24,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $metadata = cargo metadata --manifest-path agent/Cargo.toml --locked --no-deps --format-version 1 | ConvertFrom-Json
-          $version = ($metadata.packages | Where-Object name -eq "agent-service").version
+          pnpm version:check
+          $version = (Get-Content -LiteralPath "VERSION" -Raw).Trim()
           if ("${{ github.ref_type }}" -eq "tag") {
             $tag = "${{ github.ref_name }}"
             if (-not $tag.StartsWith("v") -or $tag.Substring(1) -ne $version) {
-              throw "Tag version must match the Cargo workspace version."
+              throw "Tag version must match VERSION."
             }
-          }
-          $sessionPackageVersion = (Get-Content -LiteralPath "agent/apps/agent-session/package.json" | ConvertFrom-Json).version
-          $tauriVersion = (Get-Content -LiteralPath "agent/apps/agent-session/src-tauri/tauri.conf.json" | ConvertFrom-Json).version
-          if ($sessionPackageVersion -ne $version -or $tauriVersion -ne $version) {
-            throw "Agent package versions are inconsistent."
           }
           $buildTime = (Get-Date).ToUniversalTime().ToString("o")
           "VERSION=$version" >> $env:GITHUB_ENV
@@ -60,16 +55,13 @@ jobs:
           if ($signature.Status -ne "Valid" -or $signature.SignerCertificate.Subject -notmatch "Microsoft Corporation") {
             throw "The WebView2 Bootstrapper signature is invalid."
           }
-          $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
-          "RCH_WEBVIEW2_BOOTSTRAPPER_SHA256=$digest" >> $env:GITHUB_ENV
       - name: Build Windows components
         shell: pwsh
         run: |
-          cargo build --manifest-path agent/Cargo.toml --workspace --exclude agent-session --locked --release
+          cargo build --manifest-path agent/Cargo.toml --workspace --exclude agent-session --exclude agent-bootstrapper --locked --release
           pnpm --filter @remote-control-hub/agent-session exec tauri build --no-bundle
           Copy-Item -LiteralPath "agent/target/release/agent-service.exe" -Destination "artifacts/components/agent-service.exe"
           Copy-Item -LiteralPath "agent/target/release/agent-session.exe" -Destination "artifacts/components/agent-session.exe"
-          Copy-Item -LiteralPath "agent/target/release/agent-bootstrapper.exe" -Destination "artifacts/components/agent-bootstrapper.exe"
       - name: Build MSI
         shell: pwsh
         run: |
@@ -78,39 +70,25 @@ jobs:
           $session = (Resolve-Path -LiteralPath "artifacts/components/agent-session.exe").Path
           dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$env:VERSION" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -out "artifacts/components/remote-control-hub-agent.msi"
           dotnet tool run wix -- msi validate -acceptEula wix7 "artifacts/components/remote-control-hub-agent.msi"
-      - name: Prepare unsigned release files
+      - name: Build self-contained unsigned installer
         shell: pwsh
         run: |
           $releaseDirectory = "artifacts/unsigned"
           New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
-          Copy-Item -LiteralPath "artifacts/components/agent-bootstrapper.exe" -Destination "$releaseDirectory/Remote-Control-Hub-Agent-Setup-$env:VERSION-unsigned.exe"
-          Copy-Item -LiteralPath "artifacts/components/remote-control-hub-agent.msi" -Destination "$releaseDirectory/remote-control-hub-agent-$env:VERSION-unsigned.msi"
-          Copy-Item -LiteralPath "artifacts/components/MicrosoftEdgeWebview2Setup.exe" -Destination "$releaseDirectory/MicrosoftEdgeWebview2Setup.exe"
-          Copy-Item -LiteralPath "THIRD_PARTY_LICENSES.txt" -Destination "$releaseDirectory/THIRD_PARTY_LICENSES.txt"
-          $warning = "This Windows release is not Authenticode signed. Windows may display Unknown publisher or Microsoft Defender SmartScreen warnings."
-          [IO.File]::WriteAllText("$releaseDirectory/UNSIGNED_BUILD.txt", "$warning$([Environment]::NewLine)")
-          $metadata = [ordered]@{
-            buildTime = $env:RCH_BUILD_TIME
-            commit = "${{ github.sha }}"
-            signed = $false
-            version = $env:VERSION
-            warning = $warning
-            webView2Sha256 = $env:RCH_WEBVIEW2_BOOTSTRAPPER_SHA256
-            wixVersion = "7.0.0"
+          $env:RCH_EMBEDDED_MSI_PATH = (Resolve-Path -LiteralPath "artifacts/components/remote-control-hub-agent.msi").Path
+          $env:RCH_EMBEDDED_WEBVIEW2_PATH = (Resolve-Path -LiteralPath "artifacts/components/MicrosoftEdgeWebview2Setup.exe").Path
+          cargo build --manifest-path agent/Cargo.toml --package agent-bootstrapper --locked --release
+          $installer = "$releaseDirectory/Remote-Control-Hub-Agent-Setup-$env:VERSION-unsigned.exe"
+          Copy-Item -LiteralPath "agent/target/release/agent-bootstrapper.exe" -Destination $installer
+          & $installer --verify-bundle
+          if ($LASTEXITCODE -ne 0) {
+            throw "The self-contained installer payload verification failed."
           }
-          $metadata | ConvertTo-Json | Set-Content -LiteralPath "$releaseDirectory/build-metadata.json" -Encoding utf8NoBOM
-          $checksumLines = Get-ChildItem -LiteralPath $releaseDirectory -File | Sort-Object Name | ForEach-Object {
-            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
-            "$hash *$($_.Name)"
-          }
-          [IO.File]::WriteAllLines("$releaseDirectory/SHA256SUMS", [string[]]$checksumLines, [Text.UTF8Encoding]::new($false))
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           if-no-files-found: error
           name: unsigned-client-${{ github.sha }}
-          path: |
-            artifacts/components/*
-            artifacts/unsigned/*
+          path: artifacts/unsigned/*.exe
           retention-days: 30
 
   publish-release:
@@ -126,7 +104,7 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: unsigned-client-${{ github.sha }}
-          path: artifacts
+          path: artifacts/unsigned
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: artifacts/unsigned/*
@@ -137,17 +115,35 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $assets = Get-ChildItem -LiteralPath "artifacts/unsigned" -File | ForEach-Object FullName
+          $assets = @(Get-ChildItem -LiteralPath "artifacts/unsigned" -File | ForEach-Object FullName)
+          if ($assets.Count -ne 1) {
+            throw "Exactly one release asset is required."
+          }
+          $asset = Get-Item -LiteralPath $assets[0]
+          $sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $asset.FullName).Hash.ToLowerInvariant()
           $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
-          @'
+          @"
           > [!WARNING]
-          > This Windows release is not Authenticode signed. Windows may display Unknown publisher or Microsoft Defender SmartScreen warnings. Download it only from this repository and verify each file against SHA256SUMS before installation.
+          > This Windows release is not Authenticode signed. Windows may display Unknown publisher or Microsoft Defender SmartScreen warnings. Download it only from this repository and verify the SHA-256 value before installation.
 
           Commit: ${{ github.sha }}
-          '@ | Set-Content -LiteralPath $notesPath -Encoding utf8NoBOM
-          if (gh release view $tag 2>$null) {
+          File: $($asset.Name)
+          SHA-256: ``$sha256``
+          Third-party licenses: https://github.com/${{ github.repository }}/blob/${{ github.sha }}/THIRD_PARTY_LICENSES.txt
+          "@ | Set-Content -LiteralPath $notesPath -Encoding utf8NoBOM
+          $existingRelease = gh release view $tag --json assets 2>$null
+          if ($LASTEXITCODE -eq 0) {
             gh release upload $tag @assets --clobber
             gh release edit $tag --title "$tag (unsigned)" --notes-file $notesPath
+            $currentRelease = gh release view $tag --json assets | ConvertFrom-Json
+            foreach ($existingAsset in $currentRelease.assets) {
+              if ($existingAsset.name -ne $asset.Name) {
+                gh release delete-asset $tag $existingAsset.name --yes
+                if ($LASTEXITCODE -ne 0) {
+                  throw "Unable to remove the previous release asset: $($existingAsset.name)"
+                }
+              }
+            }
           } else {
             gh release create $tag @assets --verify-tag --title "$tag (unsigned)" --notes-file $notesPath
           }
