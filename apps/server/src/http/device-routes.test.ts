@@ -82,7 +82,7 @@ const createConfig = async (): Promise<ServerConfig> => {
 const createRuntime = () => {
   const keys = generateKeyPairSync("ed25519");
   const publicDer = keys.publicKey.export({ format: "der", type: "spki" });
-  const recordAuthenticated = vi.fn(async () => undefined);
+  const recordAuthenticated = vi.fn(async () => 1);
   const recordHeartbeat = vi.fn(async () => undefined);
   const agentRepository: AgentConnectionRepository = {
     findAuthenticationDevice: async () => ({

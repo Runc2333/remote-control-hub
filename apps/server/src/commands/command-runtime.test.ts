@@ -42,7 +42,7 @@ const createFixture = (online: boolean) => {
   };
   const agentRepository: AgentConnectionRepository = {
     findAuthenticationDevice: vi.fn(async () => undefined),
-    recordAuthenticated: vi.fn(async () => undefined),
+    recordAuthenticated: vi.fn(async () => 1),
     recordDisconnected: vi.fn(async () => undefined),
     recordHeartbeat: vi.fn(async () => undefined),
   };

@@ -28,6 +28,8 @@ type EnrollmentRow = RowDataPacket & {
 
 type CountRow = RowDataPacket & { count: number };
 
+type GenerationRow = RowDataPacket & { generation: number | string };
+
 type DeviceRow = RowDataPacket & {
   capabilities: unknown;
   computerName: string;
@@ -191,13 +193,29 @@ const createAgentConnectionRepository = (
       await connection.end();
     }
   },
-  recordAuthenticated: async (hello, generation, remoteAddress, sessionId) => {
+  recordAuthenticated: async (hello, remoteAddress, sessionId) => {
     const connection = await createConnection(connectionOptions(config));
     const now = mysqlDateTime(new Date());
     try {
       await connection.beginTransaction();
+      const [devices] = await connection.execute<RowDataPacket[]>(
+        "SELECT id FROM devices WHERE id = ? AND disabled_at IS NULL AND credential_revoked_at IS NULL AND deleted_at IS NULL FOR UPDATE",
+        [hello.deviceId],
+      );
+      if (devices[0] === undefined) {
+        throw new Error("device_authentication_failed");
+      }
+      const [generations] = await connection.execute<GenerationRow[]>(
+        "SELECT generation FROM device_sessions WHERE device_id = ? ORDER BY generation DESC LIMIT 1 FOR UPDATE",
+        [hello.deviceId],
+      );
+      const previousGeneration = Number(generations[0]?.generation ?? 0);
+      const generation = previousGeneration + 1;
+      if (!Number.isSafeInteger(generation) || generation <= 0) {
+        throw new Error("agent_generation_invalid");
+      }
       await connection.execute<ResultSetHeader>(
-        "UPDATE devices SET service_version = ?, session_version = ?, capabilities = ?, last_seen_at = ? WHERE id = ? AND disabled_at IS NULL AND credential_revoked_at IS NULL",
+        "UPDATE devices SET service_version = ?, session_version = ?, capabilities = ?, last_seen_at = ? WHERE id = ?",
         [
           hello.serviceVersion,
           hello.sessionVersion,
@@ -211,6 +229,7 @@ const createAgentConnectionRepository = (
         [sessionId, hello.deviceId, generation, now, now, remoteAddress],
       );
       await connection.commit();
+      return generation;
     } catch (error: unknown) {
       await connection.rollback();
       throw error;

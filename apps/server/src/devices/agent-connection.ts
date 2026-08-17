@@ -25,10 +25,9 @@ export type AgentConnectionRepository = {
   ) => Promise<AgentAuthenticationDevice | undefined>;
   recordAuthenticated: (
     hello: AgentHello,
-    generation: number,
     remoteAddress: string,
     sessionId: string,
-  ) => Promise<void>;
+  ) => Promise<number>;
   recordDisconnected: (sessionId: string, reason: string) => Promise<void>;
   recordHeartbeat: (deviceId: string, sessionId: string) => Promise<void>;
 };
@@ -140,16 +139,17 @@ export class AgentConnectionCoordinator {
     ) {
       throw new Error("device_authentication_failed");
     }
-    const generation = this.#connections.connect(message.deviceId);
+    const generation = await this.#repository.recordAuthenticated(
+      pending.hello,
+      remoteAddress.slice(0, 64),
+      message.sessionId,
+    );
     try {
-      await this.#repository.recordAuthenticated(
-        pending.hello,
-        generation,
-        remoteAddress.slice(0, 64),
-        message.sessionId,
-      );
+      this.#connections.connect(message.deviceId, generation);
     } catch (error: unknown) {
-      this.#connections.disconnect(message.deviceId, generation);
+      await this.#repository
+        .recordDisconnected(message.sessionId, "connection_rejected")
+        .catch(() => undefined);
       throw error;
     }
     return {

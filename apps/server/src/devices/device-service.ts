@@ -49,14 +49,22 @@ export class DeviceConnectionRegistry {
     this.#maximumConnections = maximumConnections;
   }
 
-  public connect(deviceId: string): number {
+  public connect(deviceId: string, persistedGeneration?: number): number {
     if (
       !this.#connections.has(deviceId) &&
       this.#connections.size >= this.#maximumConnections
     ) {
       throw new Error("agent_connection_capacity_exceeded");
     }
-    const generation = (this.#connections.get(deviceId)?.generation ?? 0) + 1;
+    const currentGeneration = this.#connections.get(deviceId)?.generation ?? 0;
+    const generation = persistedGeneration ?? currentGeneration + 1;
+    if (
+      !Number.isSafeInteger(generation) ||
+      generation <= 0 ||
+      generation <= currentGeneration
+    ) {
+      throw new Error("agent_generation_invalid");
+    }
     this.#connections.set(deviceId, { generation });
     this.#emit({ deviceId, online: true });
     return generation;

@@ -151,7 +151,7 @@ export class AuditQueryService {
     values.push(limit + 1);
     const connection = await createConnection(connectionOptions(this.#config));
     try {
-      const [rows] = await connection.execute<AuditRow[]>(
+      const [rows] = await connection.query<AuditRow[]>(
         `SELECT id, occurred_at AS occurredAt, actor_type AS actorType, actor_id AS actorId, subject_type AS subjectType, subject_id AS subjectId, action, result, error_category AS errorCategory, request_id AS requestId, source_address_class AS sourceAddressClass, visibility FROM audit_events WHERE ${clauses.join(" AND ")} ORDER BY occurred_at DESC, id DESC LIMIT ?`,
         values,
       );

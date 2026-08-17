@@ -1024,6 +1024,10 @@ export const deviceRoutes: FastifyPluginAsync<DeviceRoutesOptions> = async (
         void Promise.resolve()
           .then(async () => handleMessage(serializeAgentMessage(data)))
           .catch((error: unknown) => {
+            fastify.log.warn(
+              { error, requestId: request.id },
+              "agent_connection_message_rejected",
+            );
             socket.close(
               4003,
               process.env.NODE_ENV === "test" && error instanceof Error

@@ -332,6 +332,12 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
       } catch (error: unknown) {
         const invalidCursor =
           error instanceof Error && error.message === "audit_cursor_invalid";
+        if (!invalidCursor) {
+          fastify.log.error(
+            { error, requestId: request.id },
+            "audit_query_failed",
+          );
+        }
         return reply
           .code(invalidCursor ? 400 : 503)
           .send(
@@ -372,6 +378,12 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
       } catch (error: unknown) {
         const invalidCursor =
           error instanceof Error && error.message === "audit_cursor_invalid";
+        if (!invalidCursor) {
+          fastify.log.error(
+            { error, requestId: request.id },
+            "audit_query_failed",
+          );
+        }
         return reply
           .code(invalidCursor ? 400 : 503)
           .send(

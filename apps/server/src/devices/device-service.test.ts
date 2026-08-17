@@ -133,6 +133,16 @@ describe("device service", () => {
     ]);
   });
 
+  it("accepts a persisted generation after restart and rejects stale values", () => {
+    const connections = new DeviceConnectionRegistry();
+
+    expect(connections.connect("device-1", 42)).toBe(42);
+    expect(() => connections.connect("device-1", 42)).toThrow(
+      "agent_generation_invalid",
+    );
+    expect(connections.connect("device-1", 43)).toBe(43);
+  });
+
   it("forcibly closes and removes an active connection", () => {
     const connections = new DeviceConnectionRegistry();
     const close = vi.fn();

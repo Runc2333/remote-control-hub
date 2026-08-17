@@ -26,7 +26,11 @@ const createFixture = () => {
   const keys = generateKeyPairSync("ed25519");
   const publicDer = keys.publicKey.export({ format: "der", type: "spki" });
   const publicKey = Buffer.from(publicDer).subarray(-32);
-  const recordAuthenticated = vi.fn(async () => undefined);
+  let nextGeneration = 0;
+  const recordAuthenticated = vi.fn(async () => {
+    nextGeneration += 1;
+    return nextGeneration;
+  });
   const recordDisconnected = vi.fn(async () => undefined);
   const recordHeartbeat = vi.fn(async () => undefined);
   const repository: AgentConnectionRepository = {
@@ -90,7 +94,6 @@ describe("agent connection coordinator", () => {
     ).toBe(true);
     expect(fixture.recordAuthenticated).toHaveBeenCalledWith(
       HELLO,
-      connection.generation,
       "127.0.0.1",
       message.sessionId,
     );
