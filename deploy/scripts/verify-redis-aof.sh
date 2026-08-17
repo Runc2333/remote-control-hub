@@ -7,7 +7,7 @@ fi
 
 DEPLOY_ROOT="$(realpath -- "$1")"
 CURRENT_DIRECTORY="$(readlink -f -- "$DEPLOY_ROOT/current")"
-SHARED_ENVIRONMENT="$DEPLOY_ROOT/shared/production.env"
+SHARED_ENVIRONMENT="$DEPLOY_ROOT/shared/compose-secrets.env"
 RUNTIME_ENVIRONMENT="$CURRENT_DIRECTORY/runtime.env"
 SENTINEL_KEY="rch:aof-check:$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 SENTINEL_VALUE="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
@@ -22,7 +22,7 @@ compose() {
 }
 
 redis() {
-  compose exec -T redis sh -eu -c 'REDISCLI_AUTH="$REDIS_PASSWORD" exec redis-cli --no-auth-warning "$@"' sh "$@"
+  compose exec -T remote-control-hub-redis sh -eu -c 'REDISCLI_AUTH="$REDIS_PASSWORD" exec redis-cli --no-auth-warning "$@"' sh "$@"
 }
 
 [[ "$(redis CONFIG GET appendonly | tail -n 1)" == "yes" ]]
@@ -35,7 +35,7 @@ for _ in {1..60}; do
   sleep 1
 done
 [[ "$(redis INFO persistence | tr -d '\r' | sed -n 's/^aof_last_bgrewrite_status://p')" == "ok" ]]
-compose restart redis >/dev/null
+compose restart remote-control-hub-redis >/dev/null
 for _ in {1..30}; do
   if [[ "$(redis PING 2>/dev/null || true)" == "PONG" ]]; then
     break

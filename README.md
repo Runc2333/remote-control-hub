@@ -67,10 +67,10 @@ Remote Control Hub 是一个面向多用户的自托管 Windows 设备远程控�
 
 ### 部署与发布
 
-- Docker Compose 集成服务端、MySQL、Redis 和 Caddy。
-- Caddy 提供 HTTPS/WSS、严格安全响应头和静态资源缓存策略。
+- Docker Compose 集成服务端、MySQL 和 Redis，应用通过宿主机回环地址的 HTTP `51692` 端口提供服务。
+- 宿主机 Nginx 负责 HTTPS/WSS、证书、安全响应头和反向代理，仓库提供可直接调整的配置示例。
 - GitHub Actions 执行格式、lint、类型、测试、构建、依赖审计、契约漂移和 Windows MSI 检查。
-- 服务端镜像发布到 GHCR，生产部署默认要求 `production-deploy` Environment 人工批准。
+- 服务端镜像由受保护的部署工作流构建并直接通过 SSH 传到目标服务器，不使用容器注册表。
 - Windows 发行物明确标记为未签名，并同时提供 SHA-256、构建元数据和 GitHub provenance。
 - Windows 客户端只提示新的 GitHub Release，不自动下载、静默安装或自替换。
 
@@ -84,7 +84,7 @@ flowchart LR
     AgentService["Windows Agent Service<br/>LocalSystem / Session 0"] -->|"WSS 出站连接"| Server
     AgentService -->|"受限 Named Pipe"| AgentSession["Tauri Session<br/>交互用户会话"]
     AgentSession --> Win32["SC_MONITORPOWER<br/>WM_APPCOMMAND"]
-    Caddy["Caddy HTTPS/WSS"] --> Server
+    Nginx["宿主机 Nginx HTTPS/WSS"] -->|"HTTP 127.0.0.1:51692"| Server
 ```
 
 Windows Agent 使用双进程模型：
@@ -121,7 +121,7 @@ Remote Control Hub 将远程控制限制在固定协议和明确授权范围内�
 | PWA              | 自定义 TypeScript Service Worker、Cache Storage、IndexedDB |
 | Windows Agent    | Rust 1.93、Tokio、windows-rs、Tauri 2                      |
 | 安装器           | WiX Toolset 7、MSI、原生 Rust Bootstrapper                 |
-| 反向代理         | Caddy 2                                                    |
+| 反向代理         | 宿主机 Nginx                                               |
 | 包管理           | pnpm 10 workspace、Cargo workspace                         |
 | 测试与质量       | Vitest、ESLint、Prettier、Clippy、cargo-deny               |
 
@@ -141,7 +141,7 @@ remote-control-hub/
 │  ├─ server/               Fastify 服务端与 Drizzle 迁移
 │  └─ web/                  React WebUI 与 Service Worker
 ├─ assets/                  应用图标的版本化 SVG 源文件
-├─ deploy/                  Compose、Caddy 和运维脚本
+├─ deploy/                  Compose、Nginx 示例和运维脚本
 ├─ packages/
 │  ├─ api-client/           类型安全的 Web API 客户端
 │  ├─ contracts/            TypeBox 契约唯一源码
@@ -239,24 +239,25 @@ pnpm --filter @remote-control-hub/server build
 node apps/server/dist/index.js
 ```
 
-默认监听 `0.0.0.0:3000` 并以 `standalone` 安装模式启动。若需要由服务端同时提供 WebUI，应先构建 WebUI 并设置 `WEB_ROOT` 指向 `apps/web/dist`。
+默认监听 `0.0.0.0:51692` 并以 `standalone` 安装模式启动。若需要由服务端同时提供 WebUI，应先构建 WebUI 并设置 `WEB_ROOT` 指向 `apps/web/dist`。
 
 ## 服务端配置
 
 ### 基础配置
 
-| 变量                | 默认值        | 说明                                |
-| ------------------- | ------------- | ----------------------------------- |
-| `DEPLOYMENT_MODE`   | `standalone`  | `standalone` 或 `compose`           |
-| `HOST`              | `0.0.0.0`     | HTTP 监听地址                       |
-| `PORT`              | `3000`        | HTTP 监听端口                       |
-| `RELEASE_ID`        | `development` | 当前不可变发布标识                  |
-| `APP_ORIGIN`        | 未设置        | 无路径的 HTTPS Origin               |
-| `COOKIE_SECRET`     | 未设置        | 至少 32 个字符的高熵随机值          |
-| `WEB_ROOT`          | 未设置        | 构建后的 WebUI 目录                 |
-| `MIGRATIONS_FOLDER` | `./drizzle`   | Drizzle SQL 迁移目录                |
-| `GEOIP_DATABASE`    | 未设置        | MaxMind City MMDB 文件路径          |
-| `TRUSTED_PROXIES`   | 未设置        | IP/CIDR JSON 数组，仅信任已配置代理 |
+| 变量                 | 默认值        | 说明                                |
+| -------------------- | ------------- | ----------------------------------- |
+| `DEPLOYMENT_MODE`    | `standalone`  | `standalone` 或 `compose`           |
+| `HOST`               | `0.0.0.0`     | HTTP 监听地址                       |
+| `PORT`               | `51692`       | HTTP 监听端口                       |
+| `RELEASE_ID`         | `development` | 当前不可变发布标识                  |
+| `APP_ORIGIN`         | 未设置        | 无路径的 HTTPS Origin               |
+| `COOKIE_SECRET`      | 未设置        | 至少 32 个字符的高熵随机值          |
+| `COOKIE_SECRET_FILE` | 未设置        | 不存在时首次启动自动生成并持久化    |
+| `WEB_ROOT`           | 未设置        | 构建后的 WebUI 目录                 |
+| `MIGRATIONS_FOLDER`  | `./drizzle`   | Drizzle SQL 迁移目录                |
+| `GEOIP_DATABASE`     | 未设置        | MaxMind City MMDB 文件路径          |
+| `TRUSTED_PROXIES`    | 未设置        | IP/CIDR JSON 数组，仅信任已配置代理 |
 
 ### 状态与审计文件
 
@@ -305,11 +306,13 @@ Redis 使用 AOF 和 `noeviction`。所有会话和认证中间态仍具有 TTL�
 
 `WEBAUTHN_RP_ID` 和 `WEBAUTHN_ORIGINS` 必须同时配置。Origin 必须位于 RP ID 或其子域名内。
 
-当前 Compose 文件未自动透传 WebAuthn 和 `TRUSTED_PROXIES` 变量。如果需要启用 Passkey 或可信代理解析，请先在 `server.environment` 中显式映射这些受信任配置，再执行部署评审。
+生产 Compose 由 `APP_URL` 自动派生并透传 WebAuthn RP ID/Origin，同时只信任 Docker 私网中的宿主机 Nginx 转发。修改正式域名后必须重新部署，并需要重新注册与旧 RP ID 绑定的 Passkey。
 
 ### TOTP keyring
 
-生产 Compose 使用 `TOTP_KEYRING_FILE`。文件格式如下：
+生产 Compose 使用 `TOTP_KEYRING_FILE`，文件不存在且尚无安装状态时会在首次启动自动生成。生成后的 keyring 位于持久化 `remote-control-hub-server-state` 卷，必须与数据库恢复点一起备份；安装状态已经存在时不会静默重建丢失的 keyring。
+
+文件格式如下：
 
 ```json
 {
@@ -326,65 +329,45 @@ Redis 使用 AOF 和 `noeviction`。所有会话和认证中间态仍具有 TTL�
 
 ### 服务器本地目录
 
-假设 `DEPLOY_PATH=/opt/remote-control-hub`，部署用户应预先创建：
+假设 `DEPLOY_PATH=/opt/remote-control-hub`，首次部署会自动创建所需目录和运行配置：
 
 ```text
 /opt/remote-control-hub/
 ├─ incoming/
 ├─ releases/
 ├─ shared/
-│  ├─ production.env
-│  ├─ totp-keyring.json
-│  └─ GeoLite2-City.mmdb
+│  └─ compose-secrets.env
 └─ backups/
 ```
 
-`shared/production.env` 至少需要：
+不需要手工创建 `production.env`。首次部署自动生成 MySQL 应用密码、MySQL root 密码和 Redis 密码，并以 `0600` 权限持久化到 `shared/compose-secrets.env`。服务端首次启动再自动生成 Cookie secret 和 TOTP keyring，并保存在 `remote-control-hub-server-state` 卷中。数据库名、数据库用户名、Redis 数据库编号和 HTTP 端口使用版本化的固定值。
 
-```dotenv
-APP_DOMAIN=control.example.com
-COOKIE_SECRET=<至少32字符的高熵随机值>
-MYSQL_DATABASE=remote_control_hub
-MYSQL_USER=remote_control_hub
-MYSQL_PASSWORD=<应用数据库密码>
-MYSQL_ROOT_PASSWORD=<MySQL root密码>
-REDIS_DATABASE=0
-REDIS_PASSWORD=<Redis密码>
-GEOIP_DATABASE_HOST=/opt/remote-control-hub/shared/GeoLite2-City.mmdb
-TOTP_KEYRING_FILE_HOST=/opt/remote-control-hub/shared/totp-keyring.json
-```
-
-该文件和 TOTP keyring 必须由服务器本地 secret 管理，并设置最小权限：
-
-```bash
-chmod 0600 /opt/remote-control-hub/shared/production.env
-chmod 0600 /opt/remote-control-hub/shared/totp-keyring.json
-```
-
-`SERVER_IMAGE` 和 `RELEASE_ID` 由版本化部署脚本写入当前 release 的 `runtime.env`，不应手工维护。
+`APP_ORIGIN`、WebAuthn RP ID/Origin、`SERVER_IMAGE` 和 `RELEASE_ID` 由部署工作流根据 `APP_URL` 与目标 commit 写入当前 release 的 `runtime.env`。这些文件由脚本维护，不应手工编辑。请为 `shared/compose-secrets.env`、`remote-control-hub-server-state` 和 MySQL 数据建立一致的加密备份；默认 Compose 未启用可选 GeoIP MMDB，缺少它只会让会话位置显示为未知，不影响认证。
 
 ### GitHub `production-deploy` Environment
 
-Secrets：
+所有配置都存为 Environment Secrets，不使用 Environment Variables：
 
-| 名称                     | 说明                           |
-| ------------------------ | ------------------------------ |
-| `DEPLOY_SSH_PRIVATE_KEY` | 专用部署用户的 SSH 私钥        |
-| `DEPLOY_SSH_KNOWN_HOSTS` | 固定的目标服务器 host key 记录 |
+| 名称                     | 示例或说明                                            |
+| ------------------------ | ----------------------------------------------------- |
+| `DEPLOY_SSH_PRIVATE_KEY` | 专用部署用户的 SSH 私钥                               |
+| `DEPLOY_HOST`            | `203.0.113.10`                                        |
+| `DEPLOY_PORT`            | `22`                                                  |
+| `DEPLOY_USER`            | `remote-control-hub`                                  |
+| `DEPLOY_PATH`            | `/opt/remote-control-hub`                             |
+| `APP_URL`                | 稳定的 HTTPS Origin，如 `https://control.example.com` |
 
-Variables：
+生产部署只能手动运行 `server-deploy.yml`，并经过 `production-deploy` Environment 审批。工作流确认目标 commit 已通过 CI 后构建 Linux `amd64` 镜像，将镜像与同 commit 的 deployment bundle 压缩、分别计算 SHA-256，并直接通过 SSH/SCP 传到目标服务器。服务器验证摘要后使用 `docker image load` 导入本地不可变标签，因此不需要 GHCR、镜像仓库账号或拉取凭据。
 
-| 名称          | 示例                          |
-| ------------- | ----------------------------- |
-| `DEPLOY_HOST` | `203.0.113.10`                |
-| `DEPLOY_PORT` | `22`                          |
-| `DEPLOY_USER` | `remote-control-hub`          |
-| `DEPLOY_PATH` | `/opt/remote-control-hub`     |
-| `APP_URL`     | `https://control.example.com` |
+部署脚本先启动并等待项目专属 MySQL 与 Redis 容器健康，再读取安装和迁移状态；空服务器会继续进入受限首次安装模式，已安装服务器则先执行兼容迁移再切换应用容器。
 
-合并到 `main` 后会构建并推送不可变 GHCR 镜像，但不会自动部署生产。生产部署只能通过手动运行 `server-deploy.yml` 并经过 Environment 审批触发。
+工作流使用 `ssh-keyscan` 在每次部署时自动生成临时 `known_hosts`，因此不需要配置 `DEPLOY_SSH_KNOWN_HOSTS`。这种方式无法验证首次取得的主机密钥是否真实，不能抵御部署当时的 SSH 中间人攻击；若部署环境需要严格服务器身份校验，应恢复使用预先固定的 host key。
 
-如果 GHCR 镜像不可公开读取，目标服务器还必须预先配置仅具有 `packages:read` 权限的拉取凭据。不要复用开发者个人的高权限令牌。
+### Nginx 与 TLS
+
+Compose 只把服务暴露在 `http://127.0.0.1:51692`，不会监听公网 80/443。复制并调整 `deploy/nginx.conf.example` 中的域名和证书路径，让宿主机 Nginx 代理到该地址。示例已经包含 WebSocket Upgrade、SSE 所需的禁用缓冲、长连接超时、安全响应头和 PWA CSP。
+
+`APP_URL` 必须与浏览器最终访问的稳定 HTTPS Origin 完全一致。部署脚本由它自动生成 WebAuthn RP ID 和允许 Origin。Passkey 不需要单独申请证书，只需要该域名拥有浏览器信任的普通 HTTPS 证书；证书可以由 Certbot/Let's Encrypt 或你现有的 Nginx 证书流程免费签发。
 
 ### 未签名 Windows 发布
 
@@ -408,7 +391,7 @@ node dist/cli/index.js setup-secret issue \
   --ttl-seconds 600
 ```
 
-Compose 部署时应通过当前 release 的 `docker compose run --rm --no-deps server` 执行同一命令，以便使用 `server-state` 持久卷。不要把秘密写入部署日志、URL、浏览器持久存储或聊天记录。
+Compose 部署时应通过当前 release 的 `docker compose run --rm --no-deps remote-control-hub-server` 执行同一命令，以便使用 `remote-control-hub-server-state` 持久卷。不要把秘密写入部署日志、URL、浏览器持久存储或聊天记录。
 
 ### 2. 打开安装页
 
@@ -571,18 +554,17 @@ CI 中不会真正关闭 GitHub runner 的显示器。Windows API 通过可替�
 
 版本化脚本位于 `deploy/scripts`：
 
-| 脚本                  | 用途                                               |
-| --------------------- | -------------------------------------------------- |
-| `deploy.sh`           | 校验 bundle、执行迁移、启动服务并切换 current 指针 |
-| `rollback.sh`         | 恢复上一兼容 deployment bundle 与镜像              |
-| `backup.sh`           | 停止写入路径并创建 Age 加密一致性备份              |
-| `validate-backup.sh`  | 校验摘要、解密备份并在隔离 MySQL 中恢复验证        |
-| `prune-backups.sh`    | 按保留策略清理备份                                 |
-| `prune-releases.sh`   | 保留有限数量的 deployment release                  |
-| `verify-redis-aof.sh` | 验证 Redis AOF                                     |
-| `update-geoip.sh`     | 校验 MMDB 摘要后原子替换 GeoIP 数据库              |
+| 脚本                  | 用途                                                |
+| --------------------- | --------------------------------------------------- |
+| `deploy.sh`           | 校验 bundle、执行迁移、启动服务并切换 current 指针  |
+| `rollback.sh`         | 恢复上一兼容 deployment bundle 与镜像               |
+| `backup.sh`           | 停止写入路径并创建 Age 加密一致性备份               |
+| `validate-backup.sh`  | 校验摘要、解密备份并在隔离 MySQL 中恢复验证         |
+| `prune-backups.sh`    | 按保留策略清理备份                                  |
+| `prune-releases.sh`   | 包含当前版本最多保留 3 个 release，并清理无引用镜像 |
+| `verify-redis-aof.sh` | 验证 Redis AOF                                      |
 
-备份使用 Age 公钥加密。恢复私钥不应与生产数据库、备份文件或服务器放在同一信任边界。每个备份恢复点同时关联数据库、服务端状态、commit 和 schema 版本。
+新建备份使用格式 v2，通过 Age 分别加密 MySQL dump、服务端状态和 `compose-secrets.env`，再统一记录 SHA-256。验证脚本仍接受不含 Compose secrets 的历史 v1 备份。恢复私钥不应与生产数据库、备份文件或服务器放在同一信任边界。每个恢复点同时关联数据库、服务端状态、commit 和 schema 版本。
 
 部署脚本只支持向前兼容迁移。应用回滚不会自动回滚数据库，因此每个 release 都必须声明并验证兼容的 schema 范围。
 

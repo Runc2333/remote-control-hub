@@ -1,7 +1,14 @@
-import { join } from "node:path";
-import { createHash } from "node:crypto";
+import { dirname, join } from "node:path";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import type {
   DeploymentMode,
   MysqlConnection,
@@ -11,6 +18,7 @@ import type {
 export type ServerConfig = {
   appOrigin?: string;
   cookieSecret?: string;
+  cookieSecretFile?: string;
   deploymentMode: DeploymentMode;
   geoIpDatabase?: string;
   host: string;
@@ -40,11 +48,48 @@ export type ServerConfig = {
 };
 
 const parsePort = (value: string | undefined): number => {
-  const parsed = Number.parseInt(value ?? "3000", 10);
+  const parsed = Number.parseInt(value ?? "51692", 10);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
     throw new Error("PORT must be an integer between 1 and 65535");
   }
   return parsed;
+};
+
+const readOrCreateSecretFile = (
+  path: string,
+  setupStateFile: string,
+  create: () => string,
+): string => {
+  if (!existsSync(path)) {
+    if (existsSync(setupStateFile)) {
+      throw new Error(`Refusing to recreate missing secret file: ${path}`);
+    }
+    mkdirSync(dirname(path), { mode: 0o700, recursive: true });
+    const temporaryPath = `${path}.${randomUUID()}.tmp`;
+    const removeTemporaryFile = (): void => {
+      try {
+        unlinkSync(temporaryPath);
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+    };
+    try {
+      writeFileSync(temporaryPath, create(), {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      linkSync(temporaryPath, path);
+    } catch (error: unknown) {
+      removeTemporaryFile();
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+    }
+    removeTemporaryFile();
+  }
+  return readFileSync(path, "utf8").trim();
 };
 
 const parseDatabase = (value: string | undefined): number => {
@@ -219,11 +264,26 @@ export const loadConfig = (environment = process.env): ServerConfig => {
     }
     config.appOrigin = origin.origin;
   }
-  if (environment.COOKIE_SECRET !== undefined) {
-    if (environment.COOKIE_SECRET.length < 32) {
+  if (
+    environment.COOKIE_SECRET !== undefined &&
+    environment.COOKIE_SECRET_FILE !== undefined
+  ) {
+    throw new Error("COOKIE_SECRET cannot be combined with COOKIE_SECRET_FILE");
+  }
+  let cookieSecret = environment.COOKIE_SECRET;
+  if (environment.COOKIE_SECRET_FILE !== undefined) {
+    cookieSecret = readOrCreateSecretFile(
+      environment.COOKIE_SECRET_FILE,
+      config.setupStateFile,
+      () => `${randomBytes(48).toString("base64url")}\n`,
+    );
+    config.cookieSecretFile = environment.COOKIE_SECRET_FILE;
+  }
+  if (cookieSecret !== undefined) {
+    if (cookieSecret.length < 32) {
       throw new Error("COOKIE_SECRET must contain at least 32 characters");
     }
-    config.cookieSecret = environment.COOKIE_SECRET;
+    config.cookieSecret = cookieSecret;
   }
   if (environment.WEB_ROOT !== undefined) {
     config.webRoot = environment.WEB_ROOT;
@@ -247,9 +307,16 @@ export const loadConfig = (environment = process.env): ServerConfig => {
   let serializedKeyring = environment.TOTP_KEYRING;
   let currentKeyVersion = environment.TOTP_CURRENT_KEY_VERSION;
   if (environment.TOTP_KEYRING_FILE !== undefined) {
-    const document: unknown = JSON.parse(
-      readFileSync(environment.TOTP_KEYRING_FILE, "utf8"),
+    const serializedDocument = readOrCreateSecretFile(
+      environment.TOTP_KEYRING_FILE,
+      config.setupStateFile,
+      () =>
+        `${JSON.stringify({
+          currentVersion: 1,
+          keys: { "1": randomBytes(32).toString("base64") },
+        })}\n`,
     );
+    const document: unknown = JSON.parse(serializedDocument);
     if (typeof document !== "object" || document === null) {
       throw new Error("TOTP_KEYRING_FILE must contain a JSON object");
     }

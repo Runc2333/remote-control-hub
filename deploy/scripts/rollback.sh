@@ -7,7 +7,7 @@ fi
 
 DEPLOY_ROOT="$(realpath -- "$1")"
 TARGET_DIRECTORY="$(realpath -- "$2")"
-SHARED_ENVIRONMENT="$DEPLOY_ROOT/shared/production.env"
+SHARED_ENVIRONMENT="$DEPLOY_ROOT/shared/compose-secrets.env"
 CURRENT_DIRECTORY="$(readlink -f -- "$DEPLOY_ROOT/current")"
 
 case "$TARGET_DIRECTORY/" in
@@ -35,6 +35,6 @@ docker compose \
   --file "$TARGET_DIRECTORY/compose.yml" \
   --env-file "$SHARED_ENVIRONMENT" \
   --env-file "$TARGET_DIRECTORY/runtime.env" \
-  up --detach --wait --wait-timeout 120
+  up --detach --remove-orphans --wait --wait-timeout 120
 ln -sfn -- "$TARGET_DIRECTORY" "$DEPLOY_ROOT/current.next"
 mv -Tf -- "$DEPLOY_ROOT/current.next" "$DEPLOY_ROOT/current"

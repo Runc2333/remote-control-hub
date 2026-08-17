@@ -7,7 +7,7 @@ const DISTRIBUTION_DIRECTORY = resolve(REPOSITORY_ROOT, "apps/web/dist");
 const MANIFEST_PATH = resolve(DISTRIBUTION_DIRECTORY, "app-version.json");
 const INDEX_PATH = resolve(DISTRIBUTION_DIRECTORY, "index.html");
 const WORKER_PATH = resolve(DISTRIBUTION_DIRECTORY, "sw.js");
-const CADDY_PATH = resolve(REPOSITORY_ROOT, "deploy/Caddyfile");
+const NGINX_PATH = resolve(REPOSITORY_ROOT, "deploy/nginx.conf.example");
 const MAX_RESOURCES = 256;
 const MAX_RESOURCE_BYTES = 8 * 1024 * 1024;
 const MAX_RELEASE_BYTES = 32 * 1024 * 1024;
@@ -95,7 +95,7 @@ const workerDigest = digest(workerBody);
 const indexBody = await readFile(INDEX_PATH);
 const indexText = indexBody.toString("utf8");
 const inlineScript = /<script>([\s\S]*?)<\/script>/u.exec(indexText)?.[1];
-const caddy = await readFile(CADDY_PATH, "utf8");
+const nginx = await readFile(NGINX_PATH, "utf8");
 if (inlineScript === undefined) {
   throw new Error("PWA startup guard is missing");
 }
@@ -103,9 +103,9 @@ const inlineScriptDigest = createHash("sha256")
   .update(inlineScript)
   .digest("base64");
 if (
-  !caddy.includes(`'sha256-${inlineScriptDigest}'`) ||
-  !caddy.includes("frame-ancestors 'none'") ||
-  !caddy.includes("object-src 'none'")
+  !nginx.includes(`'sha256-${inlineScriptDigest}'`) ||
+  !nginx.includes("frame-ancestors 'none'") ||
+  !nginx.includes("object-src 'none'")
 ) {
   throw new Error("PWA content security policy is inconsistent");
 }

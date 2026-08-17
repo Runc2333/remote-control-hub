@@ -9,7 +9,7 @@ DEPLOY_ROOT="$(realpath -- "$1")"
 BACKUP_DIRECTORY="$(realpath -- "$2")"
 IDENTITY_FILE="$(realpath -- "$3")"
 CURRENT_DIRECTORY="$(readlink -f -- "$DEPLOY_ROOT/current")"
-SHARED_ENVIRONMENT="$DEPLOY_ROOT/shared/production.env"
+SHARED_ENVIRONMENT="$DEPLOY_ROOT/shared/compose-secrets.env"
 RUNTIME_ENVIRONMENT="$CURRENT_DIRECTORY/runtime.env"
 WORK_DIRECTORY=""
 CONTAINER_NAME=""
@@ -41,16 +41,23 @@ cleanup() {
 }
 
 trap cleanup EXIT
-[[ "$(wc -l < "$BACKUP_DIRECTORY/SHA256SUMS")" -eq 3 ]]
+BACKUP_FORMAT="$(sed -n 's/^BACKUP_FORMAT=//p' "$BACKUP_DIRECTORY/metadata.env")"
+if [[ "$BACKUP_FORMAT" == "1" ]]; then
+  EXPECTED_FILE_COUNT=3
+elif [[ "$BACKUP_FORMAT" == "2" ]]; then
+  EXPECTED_FILE_COUNT=4
+else
+  exit 67
+fi
+[[ "$(wc -l < "$BACKUP_DIRECTORY/SHA256SUMS")" -eq "$EXPECTED_FILE_COUNT" ]]
 while read -r FILE_SHA256 FILE_NAME; do
   FILE_NAME="${FILE_NAME#\*}"
-  [[ "$FILE_NAME" =~ ^(metadata\.env|mysql\.sql\.gz\.age|server-state\.tar\.gz\.age)$ ]]
+  [[ "$FILE_NAME" =~ ^(compose-secrets\.env\.age|metadata\.env|mysql\.sql\.gz\.age|server-state\.tar\.gz\.age)$ ]]
   [[ "$(sha256sum "$BACKUP_DIRECTORY/$FILE_NAME" | cut -d' ' -f1)" == "$FILE_SHA256" ]]
 done < "$BACKUP_DIRECTORY/SHA256SUMS"
-BACKUP_FORMAT="$(sed -n 's/^BACKUP_FORMAT=//p' "$BACKUP_DIRECTORY/metadata.env")"
 SCHEMA_VERSION="$(sed -n 's/^SCHEMA_VERSION=//p' "$BACKUP_DIRECTORY/metadata.env")"
 RECOVERY_POINT_ID="$(sed -n 's/^RECOVERY_POINT_ID=//p' "$BACKUP_DIRECTORY/metadata.env")"
-if [[ "$BACKUP_FORMAT" != "1" ]] || [[ ! "$SCHEMA_VERSION" =~ ^[0-9]{4}$ ]] || [[ ! "$RECOVERY_POINT_ID" =~ ^[A-Za-z0-9._-]{8,100}$ ]]; then
+if [[ ! "$SCHEMA_VERSION" =~ ^[0-9]{4}$ ]] || [[ ! "$RECOVERY_POINT_ID" =~ ^[A-Za-z0-9._-]{8,100}$ ]]; then
   exit 67
 fi
 
@@ -58,6 +65,11 @@ WORK_DIRECTORY="$(mktemp -d)"
 chmod 0700 "$WORK_DIRECTORY"
 age --decrypt --identity "$IDENTITY_FILE" --output "$WORK_DIRECTORY/mysql.sql.gz" "$BACKUP_DIRECTORY/mysql.sql.gz.age"
 age --decrypt --identity "$IDENTITY_FILE" --output "$WORK_DIRECTORY/server-state.tar.gz" "$BACKUP_DIRECTORY/server-state.tar.gz.age"
+if [[ "$BACKUP_FORMAT" == "2" ]]; then
+  age --decrypt --identity "$IDENTITY_FILE" --output "$WORK_DIRECTORY/compose-secrets.env" "$BACKUP_DIRECTORY/compose-secrets.env.age"
+  [[ "$(grep -Ec '^(MYSQL_PASSWORD|MYSQL_ROOT_PASSWORD|REDIS_PASSWORD)=[a-f0-9]{64}$' "$WORK_DIRECTORY/compose-secrets.env")" -eq 3 ]]
+  [[ "$(wc -l < "$WORK_DIRECTORY/compose-secrets.env")" -eq 3 ]]
+fi
 gzip --test "$WORK_DIRECTORY/mysql.sql.gz"
 gzip --test "$WORK_DIRECTORY/server-state.tar.gz"
 if tar -tzf "$WORK_DIRECTORY/server-state.tar.gz" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
@@ -65,7 +77,7 @@ if tar -tzf "$WORK_DIRECTORY/server-state.tar.gz" | grep -Eq '(^/|(^|/)\.\.(/|$)
 fi
 tar -tzf "$WORK_DIRECTORY/server-state.tar.gz" | grep -Eq '(^|/)setup-state\.json$'
 
-MYSQL_CONTAINER="$(compose ps -q mysql)"
+MYSQL_CONTAINER="$(compose ps -q remote-control-hub-mysql)"
 MYSQL_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$MYSQL_CONTAINER")"
 CONTAINER_NAME="rch-restore-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 RESTORE_PASSWORD="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"

@@ -33,8 +33,10 @@ FROM node:22.22.1-bookworm-slim@sha256:4f77a690f2f8946ab16fe1e791a3ac0667ae1c357
 ENV DEPLOYMENT_MODE=standalone
 ENV HOST=0.0.0.0
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=51692
+ENV COOKIE_SECRET_FILE=/var/lib/remote-control-hub/cookie-secret
 ENV SETUP_STATE_FILE=/var/lib/remote-control-hub/setup-state.json
+ENV TOTP_KEYRING_FILE=/var/lib/remote-control-hub/totp-keyring.json
 ENV TZ=Asia/Shanghai
 ENV WEB_ROOT=/opt/remote-control-hub/web
 WORKDIR /opt/remote-control-hub/server
@@ -50,6 +52,6 @@ COPY --from=build --chown=remote-control-hub:remote-control-hub /opt/server ./
 COPY --from=build --chown=remote-control-hub:remote-control-hub /workspace/apps/web/dist /opt/remote-control-hub/web
 
 USER remote-control-hub
-EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(response=>{if(!response.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+EXPOSE 51692
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:51692/healthz').then(response=>{if(!response.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 CMD ["node", "dist/index.js"]

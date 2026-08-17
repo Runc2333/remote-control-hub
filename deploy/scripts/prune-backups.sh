@@ -19,5 +19,12 @@ for ((INDEX = KEEP_COUNT; INDEX < ${#BACKUPS[@]}; INDEX += 1)); do
   if [[ ! -f "$TARGET/metadata.env" ]] || [[ ! -f "$TARGET/SHA256SUMS" ]] || [[ ! -f "$TARGET/mysql.sql.gz.age" ]] || [[ ! -f "$TARGET/server-state.tar.gz.age" ]]; then
     exit 66
   fi
+  BACKUP_FORMAT="$(sed -n 's/^BACKUP_FORMAT=//p' "$TARGET/metadata.env")"
+  if [[ "$BACKUP_FORMAT" == "2" ]] && [[ ! -f "$TARGET/compose-secrets.env.age" ]]; then
+    exit 66
+  fi
+  if [[ "$BACKUP_FORMAT" != "1" && "$BACKUP_FORMAT" != "2" ]]; then
+    exit 67
+  fi
   rm -rf --one-file-system -- "$TARGET"
 done
