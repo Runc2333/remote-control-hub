@@ -117,11 +117,15 @@ fi
 
 MIGRATION_STATUS="$(compose run --rm --no-deps remote-control-hub-server node dist/cli/index.js migration status)"
 if [[ $INSTALLED -eq 1 ]]; then
-  SCHEMA_VERSION="$(sed -n 's/.*"latestExpected":"\([^"]*\)".*/\1/p' <<< "$MIGRATION_STATUS")"
+  SCHEMA_VERSION="$(sed -n 's/.*"latestExpected":"\([0-9]\{4\}\)[^"]*".*/\1/p' <<< "$MIGRATION_STATUS")"
+  MIGRATION_PENDING="$(sed -n 's/.*"pending":\([0-9][0-9]*\).*/\1/p' <<< "$MIGRATION_STATUS")"
 else
   SCHEMA_VERSION="uninitialized"
+  MIGRATION_PENDING="0"
 fi
-if [[ $INSTALLED -eq 1 ]] && [[ "$SCHEMA_VERSION" != "$TARGET_SCHEMA" ]]; then
+if [[ $INSTALLED -eq 1 ]] && { [[ "$SCHEMA_VERSION" != "$TARGET_SCHEMA" ]] || [[ "$MIGRATION_PENDING" != "0" ]]; }; then
+  printf 'Migration status mismatch: target=%s actual=%s pending=%s status=%s\n' \
+    "$TARGET_SCHEMA" "${SCHEMA_VERSION:-unknown}" "${MIGRATION_PENDING:-unknown}" "$MIGRATION_STATUS" >&2
   exit 67
 fi
 
