@@ -15,18 +15,16 @@ createRoot(root).render(
   </StrictMode>,
 );
 
-window.addEventListener("load", () => {
-  void registerServiceWorker().catch((error: unknown) => {
-    window.dispatchEvent(
-      new CustomEvent("rch-update", {
-        detail: {
-          code:
-            error instanceof Error
-              ? error.message
-              : "service_worker_registration_failed",
-          type: "UPDATE_FAILED",
-        },
-      }),
-    );
-  });
+void registerServiceWorker().catch((error: unknown) => {
+  window.dispatchEvent(
+    new CustomEvent("rch-update", {
+      detail: {
+        code:
+          error instanceof Error
+            ? error.message
+            : "service_worker_registration_failed",
+        type: "UPDATE_FAILED",
+      },
+    }),
+  );
 });

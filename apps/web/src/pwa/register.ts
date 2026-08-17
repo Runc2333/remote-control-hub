@@ -156,8 +156,11 @@ export const registerServiceWorker = async (): Promise<
       handleMessage(event.data),
     );
   }
+  let hasSeenController = navigator.serviceWorker.controller !== null;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!reloadingForWorker) {
+    if (!hasSeenController) {
+      hasSeenController = true;
+    } else if (!reloadingForWorker) {
       reloadingForWorker = true;
       window.location.reload();
     }

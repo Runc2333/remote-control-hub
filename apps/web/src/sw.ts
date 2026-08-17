@@ -1,5 +1,7 @@
+import { isRequiredReleaseRequest } from "./pwa/release-request.js";
+
 const WORKER = self as unknown as ServiceWorkerGlobalScope;
-const WORKER_VERSION = "1.0.0";
+const WORKER_VERSION = "1.0.1";
 const WORKER_PROTOCOL_VERSION = 1;
 const DATABASE_NAME = "remote-control-hub-releases";
 const DATABASE_VERSION = 1;
@@ -682,10 +684,27 @@ WORKER.addEventListener("fetch", (event) => {
         if (candidateResponse !== undefined) {
           return candidateResponse;
         }
-        await failCandidate("candidate_resource_missing");
-        return new Response("Candidate resource unavailable", {
-          status: 503,
-        });
+        const candidateManifest = await readState<ReleaseManifest>(
+          `${MANIFEST_KEY_PREFIX}${candidate.releaseId}`,
+        );
+        if (
+          candidateManifest === undefined ||
+          isRequiredReleaseRequest(
+            requestUrl,
+            event.request.mode,
+            candidateManifest.resources,
+          )
+        ) {
+          await failCandidate(
+            candidateManifest === undefined
+              ? "candidate_manifest_missing"
+              : "candidate_resource_missing",
+          );
+          return new Response("Candidate resource unavailable", {
+            status: 503,
+          });
+        }
+        return fetch(event.request);
       }
       const active = await readState<ReleasePointer>(ACTIVE_KEY);
       if (active !== undefined) {

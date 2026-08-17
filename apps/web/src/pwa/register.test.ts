@@ -23,9 +23,10 @@ const createStorage = (): StorageStub => {
   };
 };
 
-const setupBrowser = (candidate: boolean) => {
+const setupBrowser = (candidate: boolean, controlled = true) => {
   const activePostMessage = vi.fn();
   const controllerPostMessage = vi.fn();
+  const reload = vi.fn();
   const localStorage = createStorage();
   const sessionStorage = createStorage();
   localStorage.setItem(WORKER_CHECKED_AT_KEY, Date.now().toString());
@@ -47,7 +48,7 @@ const setupBrowser = (candidate: boolean) => {
   };
   const serviceWorker = {
     addEventListener: vi.fn(),
-    controller: { postMessage: controllerPostMessage },
+    controller: controlled ? { postMessage: controllerPostMessage } : null,
     ready: Promise.resolve({ active: { postMessage: activePostMessage } }),
     register: vi.fn().mockResolvedValue(registration),
   };
@@ -58,10 +59,10 @@ const setupBrowser = (candidate: boolean) => {
   vi.stubGlobal("window", {
     dispatchEvent: vi.fn(),
     isSecureContext: true,
-    location: { reload: vi.fn() },
+    location: { reload },
     setTimeout: vi.fn(),
   });
-  return { activePostMessage };
+  return { activePostMessage, reload, serviceWorker };
 };
 
 afterEach(() => {
@@ -83,5 +84,22 @@ describe("registerServiceWorker", () => {
     await registerServiceWorker();
 
     expect(activePostMessage).toHaveBeenCalledWith({ type: "START_UPDATE" });
+  });
+
+  it("does not reload when the first worker claims an uncontrolled page", async () => {
+    const { reload, serviceWorker } = setupBrowser(false, false);
+
+    await registerServiceWorker();
+    const controllerChangeCall = serviceWorker.addEventListener.mock.calls.find(
+      ([eventName]) => eventName === "controllerchange",
+    );
+    const controllerChange = controllerChangeCall?.[1];
+    expect(controllerChange).toBeTypeOf("function");
+
+    controllerChange?.();
+    expect(reload).not.toHaveBeenCalled();
+
+    controllerChange?.();
+    expect(reload).toHaveBeenCalledOnce();
   });
 });
