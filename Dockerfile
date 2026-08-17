@@ -17,6 +17,7 @@ COPY packages/tsconfig/package.json packages/tsconfig/package.json
 COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile
 
+COPY VERSION ./VERSION
 COPY apps/server apps/server
 COPY apps/web apps/web
 COPY packages packages
