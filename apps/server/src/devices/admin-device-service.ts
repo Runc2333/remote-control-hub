@@ -4,26 +4,13 @@ import {
   type ResultSetHeader,
   type RowDataPacket,
 } from "mysql2/promise";
-import type {
-  AdminDevice,
-  DeviceCapability,
-} from "@remote-control-hub/contracts";
+import type { AdminDevice } from "@remote-control-hub/contracts";
 import type { ServerConfig } from "../config.js";
+import { parseDeviceCapabilities } from "./device-capabilities.js";
 import type { DeviceConnectionRegistry } from "./device-service.js";
 
-const DEVICE_CAPABILITIES = new Set<DeviceCapability>([
-  "display.turn_off",
-  "media.volume_up",
-  "media.volume_down",
-  "media.volume_mute_toggle",
-  "media.play_pause",
-  "media.previous_track",
-  "media.next_track",
-  "media.stop",
-]);
-
 type AdminDeviceRow = RowDataPacket & {
-  capabilities: string;
+  capabilities: unknown;
   computerName: string;
   createdAt: string;
   credentialRevokedAt: string | null;
@@ -65,21 +52,6 @@ const mysqlDateTime = (date: Date): string =>
 const toIsoDateTime = (value: string): string =>
   new Date(`${value.replace(" ", "T")}Z`).toISOString();
 
-const parseCapabilities = (value: string): DeviceCapability[] => {
-  const parsed: unknown = JSON.parse(value);
-  if (
-    !Array.isArray(parsed) ||
-    !parsed.every(
-      (capability): capability is DeviceCapability =>
-        typeof capability === "string" &&
-        DEVICE_CAPABILITIES.has(capability as DeviceCapability),
-    )
-  ) {
-    throw new Error("device_capabilities_invalid");
-  }
-  return parsed;
-};
-
 export class AdminDeviceService {
   readonly #config: ServerConfig;
   readonly #connections: DeviceConnectionRegistry;
@@ -102,7 +74,7 @@ export class AdminDeviceService {
         "SELECT d.id, d.owner_user_id AS ownerUserId, u.display_identifier AS ownerDisplayIdentifier, d.computer_name AS computerName, d.service_version AS serviceVersion, d.session_version AS sessionVersion, d.capabilities, d.disabled_at AS disabledAt, d.credential_revoked_at AS credentialRevokedAt, d.last_seen_at AS lastSeenAt, d.created_at AS createdAt FROM devices d INNER JOIN users u ON u.id = d.owner_user_id WHERE d.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 1000",
       );
       return rows.map((row) => ({
-        capabilities: parseCapabilities(row.capabilities),
+        capabilities: parseDeviceCapabilities(row.capabilities),
         computerName: row.computerName,
         credentialStatus:
           row.credentialRevokedAt === null ? "active" : "revoked",

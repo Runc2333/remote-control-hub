@@ -24,6 +24,11 @@ import {
   dismissAppUpdateFailure,
   retryAppUpdate,
 } from "./pwa/register.js";
+import {
+  parseUpdateFailure,
+  type UpdateFailureDetail,
+  UPDATE_FAILURE_STORAGE_KEY,
+} from "./pwa/update-failure.js";
 
 const API_CLIENT = new ApiClient();
 
@@ -43,18 +48,34 @@ type UpdateState =
       version: string;
     }
   | { kind: "validating"; version: string }
-  | { code: string; kind: "failed" };
+  | { details: UpdateFailureDetail; kind: "failed" };
 
 type WorkspaceState =
   | { kind: "idle" | "loading" | "signed-out" }
   | { kind: "ready"; devices: Device[]; sessions: Session[] }
   | { kind: "failed"; message: string };
 
+const readInitialUpdateState = (): UpdateState => {
+  const serialized = sessionStorage.getItem(UPDATE_FAILURE_STORAGE_KEY);
+  if (serialized === null) {
+    return { kind: "idle" };
+  }
+  try {
+    return {
+      details: parseUpdateFailure(JSON.parse(serialized)),
+      kind: "failed",
+    };
+  } catch {
+    sessionStorage.removeItem(UPDATE_FAILURE_STORAGE_KEY);
+    return { kind: "idle" };
+  }
+};
+
 function App() {
   const [connection, setConnection] = useState<ConnectionState>({
     kind: "loading",
   });
-  const [update, setUpdate] = useState<UpdateState>({ kind: "idle" });
+  const [update, setUpdate] = useState<UpdateState>(readInitialUpdateState);
   const [workerUpdateVersion, setWorkerUpdateVersion] = useState<string>();
   const [workspace, setWorkspace] = useState<WorkspaceState>({ kind: "idle" });
 
@@ -109,10 +130,8 @@ function App() {
   }, [refreshWorkspace]);
 
   useEffect(() => {
-    if (connection.kind === "ready") {
-      confirmCandidateStartup();
-    }
-  }, [connection]);
+    confirmCandidateStartup();
+  }, []);
 
   useEffect(() => {
     const listener = (event: Event): void => {
@@ -143,7 +162,7 @@ function App() {
         setUpdate({ kind: "validating", version: detail.version });
       } else if (detail.type === "UPDATE_FAILED") {
         setUpdate({
-          code: typeof detail.code === "string" ? detail.code : "update_failed",
+          details: parseUpdateFailure(detail),
           kind: "failed",
         });
       } else if (detail.type === "UPDATE_ACTIVATED") {
@@ -410,8 +429,105 @@ function App() {
             {update.kind === "failed" && (
               <>
                 <p className="mt-2 text-sm text-slate-600">
-                  当前继续使用上次可用版本。错误代码：{update.code}
+                  当前继续使用上次可用版本。详细错误信息如下：
                 </p>
+                <dl className="mt-3 space-y-2 rounded-lg bg-slate-100 p-3 text-xs">
+                  <div>
+                    <dt className="font-medium text-slate-600">错误代码</dt>
+                    <dd className="break-all font-mono">
+                      {update.details.code}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-600">失败阶段</dt>
+                    <dd className="break-all font-mono">
+                      {update.details.phase}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-600">异常</dt>
+                    <dd className="break-words">
+                      {update.details.name}: {update.details.message}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-600">发生时间</dt>
+                    <dd>
+                      {new Date(update.details.occurredAt).toLocaleString()}
+                    </dd>
+                  </div>
+                  {update.details.version === undefined ? null : (
+                    <div>
+                      <dt className="font-medium text-slate-600">目标版本</dt>
+                      <dd className="break-all font-mono">
+                        {update.details.version}
+                      </dd>
+                    </div>
+                  )}
+                  {update.details.releaseId === undefined ? null : (
+                    <div>
+                      <dt className="font-medium text-slate-600">Release ID</dt>
+                      <dd className="break-all font-mono">
+                        {update.details.releaseId}
+                      </dd>
+                    </div>
+                  )}
+                  {update.details.resourceUrl === undefined ? null : (
+                    <div>
+                      <dt className="font-medium text-slate-600">资源</dt>
+                      <dd className="break-all font-mono">
+                        {update.details.resourceUrl}
+                      </dd>
+                    </div>
+                  )}
+                  {update.details.url === undefined ? null : (
+                    <div>
+                      <dt className="font-medium text-slate-600">页面 URL</dt>
+                      <dd className="break-all font-mono">
+                        {update.details.url}
+                      </dd>
+                    </div>
+                  )}
+                  {update.details.workerVersion === undefined ? null : (
+                    <div>
+                      <dt className="font-medium text-slate-600">
+                        Worker 版本
+                      </dt>
+                      <dd className="break-all font-mono">
+                        {update.details.workerVersion}
+                      </dd>
+                    </div>
+                  )}
+                  {update.details.source === undefined ? null : (
+                    <div>
+                      <dt className="font-medium text-slate-600">错误来源</dt>
+                      <dd className="break-all font-mono">
+                        {update.details.source}
+                        {update.details.line === undefined
+                          ? ""
+                          : `:${update.details.line}:${update.details.column ?? 0}`}
+                      </dd>
+                    </div>
+                  )}
+                  {update.details.userAgent === undefined ? null : (
+                    <div>
+                      <dt className="font-medium text-slate-600">浏览器</dt>
+                      <dd className="break-words font-mono">
+                        {update.details.userAgent}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+                {update.details.stack === undefined ? null : (
+                  <details className="mt-3 text-xs">
+                    <summary className="cursor-pointer font-medium">
+                      查看调用栈
+                    </summary>
+                    <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-950 p-3 text-slate-100">
+                      {update.details.stack}
+                    </pre>
+                  </details>
+                )}
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   <button
                     className="min-h-11 rounded-lg bg-teal-700 px-4 font-medium text-white"

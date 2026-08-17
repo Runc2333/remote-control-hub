@@ -9,10 +9,7 @@ import {
   type ResultSetHeader,
   type RowDataPacket,
 } from "mysql2/promise";
-import type {
-  DeviceCapability,
-  RegisterAgentRequest,
-} from "@remote-control-hub/contracts";
+import type { RegisterAgentRequest } from "@remote-control-hub/contracts";
 import type { ServerConfig } from "../config.js";
 import { AdminDeviceService } from "./admin-device-service.js";
 import {
@@ -21,17 +18,7 @@ import {
   type DeviceRepository,
   type StoredDevice,
 } from "./device-service.js";
-
-const DEVICE_CAPABILITIES = new Set<DeviceCapability>([
-  "display.turn_off",
-  "media.volume_up",
-  "media.volume_down",
-  "media.volume_mute_toggle",
-  "media.play_pause",
-  "media.previous_track",
-  "media.next_track",
-  "media.stop",
-]);
+import { parseDeviceCapabilities } from "./device-capabilities.js";
 
 type EnrollmentRow = RowDataPacket & {
   expiresAt: string;
@@ -42,7 +29,7 @@ type EnrollmentRow = RowDataPacket & {
 type CountRow = RowDataPacket & { count: number };
 
 type DeviceRow = RowDataPacket & {
-  capabilities: string;
+  capabilities: unknown;
   computerName: string;
   id: string;
   lastSeenAt: string | null;
@@ -76,21 +63,6 @@ const connectionOptions = (config: ServerConfig) => {
   };
 };
 
-const parseCapabilities = (value: string): DeviceCapability[] => {
-  const parsed: unknown = JSON.parse(value);
-  if (
-    !Array.isArray(parsed) ||
-    !parsed.every(
-      (capability): capability is DeviceCapability =>
-        typeof capability === "string" &&
-        DEVICE_CAPABILITIES.has(capability as DeviceCapability),
-    )
-  ) {
-    throw new Error("device_capabilities_invalid");
-  }
-  return parsed;
-};
-
 const createDeviceRepository = (config: ServerConfig): DeviceRepository => ({
   createEnrollmentToken: async (ownerUserId, tokenHash, expiresAt) => {
     const connection = await createConnection(connectionOptions(config));
@@ -117,7 +89,7 @@ const createDeviceRepository = (config: ServerConfig): DeviceRepository => ({
         [ownerUserId],
       );
       return rows.map((row) => ({
-        capabilities: parseCapabilities(row.capabilities),
+        capabilities: parseDeviceCapabilities(row.capabilities),
         computerName: row.computerName,
         id: row.id,
         ...(row.lastSeenAt === null

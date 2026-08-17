@@ -1,3 +1,10 @@
+import {
+  CANDIDATE_QUERY_PARAMETER,
+  createUpdateFailure,
+  parseUpdateFailure,
+  UPDATE_FAILURE_STORAGE_KEY,
+} from "./update-failure.js";
+
 const CANDIDATE_CONTEXT_KEY = "rch-candidate-context";
 const UPDATE_RETRY_AFTER_KEY = "rch-update-retry-after";
 const WORKER_CHECKED_AT_KEY = "rch-worker-checked-at";
@@ -11,10 +18,25 @@ type CandidateContext = {
 };
 
 let currentRegistration: ServiceWorkerRegistration | undefined;
+let candidateStartupConfirmed = false;
 let workerActivationNonce: string | undefined;
 let reloadingForWorker = false;
 
 const dispatchUpdate = (detail: unknown): void => {
+  if (typeof detail === "object" && detail !== null && "type" in detail) {
+    if (detail.type === "UPDATE_FAILED") {
+      sessionStorage.setItem(
+        UPDATE_FAILURE_STORAGE_KEY,
+        JSON.stringify(parseUpdateFailure(detail)),
+      );
+    } else if (
+      detail.type === "UPDATE_ACTIVATED" ||
+      detail.type === "UPDATE_CANCELLED" ||
+      detail.type === "UPDATE_CURRENT"
+    ) {
+      sessionStorage.removeItem(UPDATE_FAILURE_STORAGE_KEY);
+    }
+  }
   window.dispatchEvent(new CustomEvent("rch-update", { detail }));
 };
 
@@ -90,7 +112,9 @@ const handleMessage = (data: unknown): void => {
       data.nonce === context.nonce &&
       data.releaseId === context.releaseId
     ) {
-      window.location.reload();
+      const candidateUrl = new URL(window.location.href);
+      candidateUrl.searchParams.set(CANDIDATE_QUERY_PARAMETER, context.nonce);
+      window.location.replace(candidateUrl.toString());
     }
   } else if (
     data.type === "UPDATE_ACTIVATED" ||
@@ -127,13 +151,23 @@ const scheduleCandidateTimeout = (): void => {
       current.nonce === context.nonce &&
       current.releaseId === context.releaseId
     ) {
+      const failure = createUpdateFailure(
+        new Error("candidate_startup_timeout"),
+        {
+          code: "candidate_startup_timeout",
+          phase: "candidate_startup",
+          releaseId: context.releaseId,
+          userAgent: navigator.userAgent,
+        },
+      );
       navigator.serviceWorker.controller?.postMessage({
         ...context,
+        ...failure,
         type: "FAIL_CANDIDATE",
       });
       sessionStorage.removeItem(CANDIDATE_CONTEXT_KEY);
       dispatchUpdate({
-        code: "candidate_startup_timeout",
+        ...failure,
         type: "UPDATE_FAILED",
       });
     }
@@ -145,6 +179,16 @@ export const registerServiceWorker = async (): Promise<
 > => {
   if (!("serviceWorker" in navigator) || !window.isSecureContext) {
     return undefined;
+  }
+  const candidateContext = readCandidateContext();
+  const currentUrl = new URL(window.location.href);
+  if (currentUrl.searchParams.has(CANDIDATE_QUERY_PARAMETER)) {
+    currentUrl.searchParams.delete(CANDIDATE_QUERY_PARAMETER);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      currentUrl.toString(),
+    );
   }
   navigator.serviceWorker.addEventListener(
     "message",
@@ -190,7 +234,6 @@ export const registerServiceWorker = async (): Promise<
     localStorage.setItem(WORKER_CHECKED_AT_KEY, Date.now().toString());
     await registration.update();
   }
-  const candidateContext = readCandidateContext();
   scheduleCandidateTimeout();
   const retryAfter = Number.parseInt(
     localStorage.getItem(UPDATE_RETRY_AFTER_KEY) ?? "0",
@@ -208,13 +251,20 @@ export const registerServiceWorker = async (): Promise<
 
 export const confirmCandidateStartup = (): void => {
   const context = readCandidateContext();
-  if (context === undefined) {
+  const controller = navigator.serviceWorker.controller;
+  if (
+    context === undefined ||
+    controller === null ||
+    candidateStartupConfirmed
+  ) {
     return;
   }
-  navigator.serviceWorker.controller?.postMessage({
+  candidateStartupConfirmed = true;
+  controller.postMessage({
     ...context,
     type: "STARTUP_CONFIRMED",
   });
+  window.dispatchEvent(new CustomEvent("rch-candidate-startup-confirmed"));
 };
 
 export const cancelAppUpdate = (): void => {
@@ -223,11 +273,13 @@ export const cancelAppUpdate = (): void => {
 };
 
 export const retryAppUpdate = (): void => {
+  sessionStorage.removeItem(UPDATE_FAILURE_STORAGE_KEY);
   localStorage.removeItem(UPDATE_RETRY_AFTER_KEY);
   navigator.serviceWorker.controller?.postMessage({ type: "START_UPDATE" });
 };
 
 export const dismissAppUpdateFailure = (): void => {
+  sessionStorage.removeItem(UPDATE_FAILURE_STORAGE_KEY);
   localStorage.setItem(
     UPDATE_RETRY_AFTER_KEY,
     (Date.now() + UPDATE_RETRY_DELAY_MILLISECONDS).toString(),

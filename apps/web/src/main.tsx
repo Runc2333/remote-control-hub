@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 import App from "./App.js";
 import "./index.css";
 import { registerServiceWorker } from "./pwa/register.js";
+import {
+  createUpdateFailure,
+  UPDATE_FAILURE_STORAGE_KEY,
+} from "./pwa/update-failure.js";
 
 const root = document.getElementById("root");
 if (root === null) {
@@ -16,15 +20,23 @@ createRoot(root).render(
 );
 
 void registerServiceWorker().catch((error: unknown) => {
-  window.dispatchEvent(
-    new CustomEvent("rch-update", {
-      detail: {
-        code:
-          error instanceof Error
-            ? error.message
-            : "service_worker_registration_failed",
-        type: "UPDATE_FAILED",
-      },
-    }),
-  );
+  const failure = createUpdateFailure(error, {
+    code:
+      error instanceof Error
+        ? error.message
+        : "service_worker_registration_failed",
+    phase: "worker_registration",
+    userAgent: navigator.userAgent,
+  });
+  sessionStorage.setItem(UPDATE_FAILURE_STORAGE_KEY, JSON.stringify(failure));
+  window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("rch-update", {
+        detail: {
+          ...failure,
+          type: "UPDATE_FAILED",
+        },
+      }),
+    );
+  }, 0);
 });

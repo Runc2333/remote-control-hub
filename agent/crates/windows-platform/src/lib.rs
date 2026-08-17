@@ -548,34 +548,58 @@ pub fn named_pipe_client_process_id(handle: *mut std::ffi::c_void) -> Result<u32
 }
 
 #[cfg(windows)]
-pub fn named_pipe_server_is_local_system(
+pub fn named_pipe_server_is_service(
     handle: *mut std::ffi::c_void,
+    service_name: &str,
 ) -> Result<bool, &'static str> {
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows::Win32::Security::TOKEN_QUERY;
+    use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::Pipes::GetNamedPipeServerProcessId;
-    use windows::Win32::System::Threading::{
-        OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
+    use windows::Win32::System::Services::{
+        CloseServiceHandle, OpenSCManagerW, OpenServiceW, QueryServiceStatusEx, SC_MANAGER_CONNECT,
+        SC_STATUS_PROCESS_INFO, SERVICE_QUERY_STATUS, SERVICE_STATUS_PROCESS,
     };
+    use windows::core::HSTRING;
 
-    let mut process_id = 0_u32;
+    let mut pipe_process_id = 0_u32;
     unsafe {
-        GetNamedPipeServerProcessId(HANDLE(handle), &mut process_id)
+        GetNamedPipeServerProcessId(HANDLE(handle), &mut pipe_process_id)
             .map_err(|_| "pipe_server_identity_unavailable")?;
     }
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) }
-        .map_err(|_| "pipe_server_identity_unavailable")?;
-    let mut token = HANDLE::default();
-    let token_result = unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) };
+    let manager = unsafe { OpenSCManagerW(None, None, SC_MANAGER_CONNECT) }
+        .map_err(|_| "service_identity_unavailable")?;
+    let service =
+        unsafe { OpenServiceW(manager, &HSTRING::from(service_name), SERVICE_QUERY_STATUS) };
+    let service = match service {
+        Ok(service) => service,
+        Err(_) => {
+            unsafe {
+                let _ = CloseServiceHandle(manager);
+            }
+            return Err("service_identity_unavailable");
+        }
+    };
+    let mut status = SERVICE_STATUS_PROCESS::default();
+    let buffer = unsafe {
+        std::slice::from_raw_parts_mut(
+            (&mut status as *mut SERVICE_STATUS_PROCESS).cast::<u8>(),
+            std::mem::size_of::<SERVICE_STATUS_PROCESS>(),
+        )
+    };
+    let mut bytes_needed = 0_u32;
+    let query_result = unsafe {
+        QueryServiceStatusEx(
+            service,
+            SC_STATUS_PROCESS_INFO,
+            Some(buffer),
+            &mut bytes_needed,
+        )
+    };
     unsafe {
-        let _ = CloseHandle(process);
+        let _ = CloseServiceHandle(service);
+        let _ = CloseServiceHandle(manager);
     }
-    token_result.map_err(|_| "pipe_server_identity_unavailable")?;
-    let sid = token_user_sid(token);
-    unsafe {
-        let _ = CloseHandle(token);
-    }
-    Ok(sid? == "S-1-5-18")
+    query_result.map_err(|_| "service_identity_unavailable")?;
+    Ok(status.dwProcessId != 0 && status.dwProcessId == pipe_process_id)
 }
 
 #[cfg(windows)]

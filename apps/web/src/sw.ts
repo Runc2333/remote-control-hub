@@ -1,7 +1,13 @@
 import { isRequiredReleaseRequest } from "./pwa/release-request.js";
+import {
+  CANDIDATE_QUERY_PARAMETER,
+  createUpdateFailure,
+  parseUpdateFailure,
+  type UpdateFailureDetail,
+} from "./pwa/update-failure.js";
 
 const WORKER = self as unknown as ServiceWorkerGlobalScope;
-const WORKER_VERSION = "1.0.1";
+const WORKER_VERSION = "1.0.2";
 const WORKER_PROTOCOL_VERSION = 1;
 const DATABASE_NAME = "remote-control-hub-releases";
 const DATABASE_VERSION = 1;
@@ -387,6 +393,8 @@ const downloadCandidate = async (): Promise<void> => {
   const signal = AbortSignal.any([updateAbortController.signal, timeoutSignal]);
   let cacheName: string | undefined;
   let manifest: ReleaseManifest | undefined;
+  let phase = "manifest_fetch";
+  let resourceUrl: string | undefined;
   try {
     const manifestResponse = await fetch("/app-version.json", {
       cache: "no-store",
@@ -402,6 +410,7 @@ const downloadCandidate = async (): Promise<void> => {
     ) {
       throw new Error("release_manifest_unavailable");
     }
+    phase = "manifest_validation";
     manifest = validateManifest(await manifestResponse.json());
     const targetManifest = manifest;
     const active = await readState<ReleasePointer>(ACTIVE_KEY);
@@ -413,9 +422,11 @@ const downloadCandidate = async (): Promise<void> => {
       });
       return;
     }
+    phase = "api_compatibility";
     await assertApiCompatibility(manifest, signal);
     const generation = lease.generation;
     cacheName = `release-${manifest.releaseId}`;
+    phase = "candidate_cache_initialization";
     await caches.delete(cacheName);
     const cache = await caches.open(cacheName);
     let downloadedBytes = 0;
@@ -435,6 +446,8 @@ const downloadCandidate = async (): Promise<void> => {
       version: manifest.version,
     });
     for (const [index, resource] of manifest.resources.entries()) {
+      resourceUrl = resource.url;
+      phase = "resource_fetch";
       const response = await fetch(resource.url, {
         cache: "no-store",
         credentials: "same-origin",
@@ -449,6 +462,7 @@ const downloadCandidate = async (): Promise<void> => {
       ) {
         throw new Error("release_resource_unavailable");
       }
+      phase = "resource_read";
       const previousBytes = downloadedBytes;
       const body = await readResponseBody(
         response,
@@ -467,6 +481,7 @@ const downloadCandidate = async (): Promise<void> => {
           });
         },
       );
+      phase = "resource_digest";
       const digest = bytesToHex(await crypto.subtle.digest("SHA-256", body));
       if (digest !== resource.sha256) {
         throw new Error("release_resource_digest_mismatch");
@@ -477,6 +492,7 @@ const downloadCandidate = async (): Promise<void> => {
         headers.set("content-type", contentType);
       }
       headers.set("content-length", resource.bytes.toString());
+      phase = "resource_cache_write";
       await cache.put(
         resource.url,
         new Response(body, { headers, status: 200 }),
@@ -490,6 +506,8 @@ const downloadCandidate = async (): Promise<void> => {
         ],
       ]);
     }
+    resourceUrl = undefined;
+    phase = "candidate_state_write";
     await writeState([
       [`${MANIFEST_KEY_PREFIX}${manifest.releaseId}`, manifest],
       [
@@ -517,6 +535,16 @@ const downloadCandidate = async (): Promise<void> => {
       await caches.delete(cacheName);
     }
     const code = error instanceof Error ? error.message : "update_failed";
+    const failure = createUpdateFailure(error, {
+      code,
+      phase,
+      ...(manifest === undefined
+        ? {}
+        : { releaseId: manifest.releaseId, version: manifest.version }),
+      ...(resourceUrl === undefined ? {} : { resourceUrl }),
+      userAgent: WORKER.navigator.userAgent,
+      workerVersion: WORKER_VERSION,
+    });
     await writeState([
       [CANDIDATE_KEY, undefined],
       ...(manifest === undefined
@@ -532,7 +560,7 @@ const downloadCandidate = async (): Promise<void> => {
     await notifyClients(
       code === "update_cancelled"
         ? { type: "UPDATE_CANCELLED" }
-        : { code, type: "UPDATE_FAILED" },
+        : { ...failure, type: "UPDATE_FAILED" },
     );
   } finally {
     updateAbortController = undefined;
@@ -560,7 +588,17 @@ const promoteCandidate = async (
     candidate.validationExpiresAt === undefined ||
     candidate.validationExpiresAt < Date.now()
   ) {
-    await failCandidate("candidate_startup_timeout");
+    const code = "candidate_startup_timeout";
+    await failCandidate(
+      createUpdateFailure(new Error(code), {
+        code,
+        phase: "candidate_promotion",
+        releaseId: candidate.releaseId,
+        userAgent: WORKER.navigator.userAgent,
+        version: candidate.version,
+        workerVersion: WORKER_VERSION,
+      }),
+    );
     return;
   }
   const manifest = await readState<ReleaseManifest>(
@@ -599,7 +637,7 @@ const promoteCandidate = async (
   });
 };
 
-const failCandidate = async (code: string): Promise<void> => {
+const failCandidate = async (failure: UpdateFailureDetail): Promise<void> => {
   const candidate = await readState<CandidatePointer>(CANDIDATE_KEY);
   if (candidate !== undefined) {
     await caches.delete(`release-${candidate.releaseId}`);
@@ -619,7 +657,7 @@ const failCandidate = async (code: string): Promise<void> => {
           ]),
     ]);
   }
-  await notifyClients({ code, type: "UPDATE_FAILED" });
+  await notifyClients({ ...failure, type: "UPDATE_FAILED" });
 };
 
 WORKER.addEventListener("install", () => undefined);
@@ -630,6 +668,10 @@ WORKER.addEventListener("activate", (event) => {
 
 WORKER.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
+  const replacesClientId =
+    "replacesClientId" in event && typeof event.replacesClientId === "string"
+      ? event.replacesClientId
+      : undefined;
   if (
     event.request.method !== "GET" ||
     requestUrl.origin !== WORKER.location.origin ||
@@ -642,7 +684,12 @@ WORKER.addEventListener("fetch", (event) => {
       const candidate = await readState<CandidatePointer>(CANDIDATE_KEY);
       if (
         event.request.mode === "navigate" &&
-        candidate?.validationSourceClientId === event.clientId &&
+        candidate !== undefined &&
+        candidate.nonce !== undefined &&
+        (requestUrl.searchParams.get(CANDIDATE_QUERY_PARAMETER) ===
+          candidate.nonce ||
+          candidate.validationSourceClientId === event.clientId ||
+          candidate.validationSourceClientId === replacesClientId) &&
         candidate.validationExpiresAt !== undefined &&
         candidate.validationExpiresAt >= Date.now() &&
         event.resultingClientId.length > 0
@@ -695,10 +742,20 @@ WORKER.addEventListener("fetch", (event) => {
             candidateManifest.resources,
           )
         ) {
-          await failCandidate(
+          const code =
             candidateManifest === undefined
               ? "candidate_manifest_missing"
-              : "candidate_resource_missing",
+              : "candidate_resource_missing";
+          await failCandidate(
+            createUpdateFailure(new Error(code), {
+              code,
+              phase: "candidate_resource",
+              releaseId: candidate.releaseId,
+              resourceUrl: requestUrl.pathname,
+              userAgent: WORKER.navigator.userAgent,
+              version: candidate.version,
+              workerVersion: WORKER_VERSION,
+            }),
           );
           return new Response("Candidate resource unavailable", {
             status: 503,
@@ -845,10 +902,18 @@ WORKER.addEventListener("message", (event) => {
           type: "RELOAD_FOR_CANDIDATE",
         });
       })().catch(async (error: unknown) => {
-        await failCandidate(
+        const code =
           error instanceof Error
             ? error.message
-            : "candidate_validation_failed",
+            : "candidate_validation_failed";
+        await failCandidate(
+          createUpdateFailure(error, {
+            code,
+            phase: "candidate_validation",
+            releaseId,
+            userAgent: WORKER.navigator.userAgent,
+            workerVersion: WORKER_VERSION,
+          }),
         );
       }),
     );
@@ -871,7 +936,7 @@ WORKER.addEventListener("message", (event) => {
           candidate.releaseId === data.releaseId &&
           candidate.nonce === data.nonce
         ) {
-          await failCandidate("candidate_startup_timeout");
+          await failCandidate(parseUpdateFailure(data));
         }
       })(),
     );
@@ -892,8 +957,16 @@ WORKER.addEventListener("message", (event) => {
         data.releaseId,
         data.nonce,
       ).catch(async (error: unknown) => {
+        const code =
+          error instanceof Error ? error.message : "candidate_startup_failed";
         await failCandidate(
-          error instanceof Error ? error.message : "candidate_startup_failed",
+          createUpdateFailure(error, {
+            code,
+            phase: "candidate_promotion",
+            releaseId: data.releaseId,
+            userAgent: WORKER.navigator.userAgent,
+            workerVersion: WORKER_VERSION,
+          }),
         );
       }),
     );

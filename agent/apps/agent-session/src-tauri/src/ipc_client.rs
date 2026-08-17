@@ -140,13 +140,14 @@ mod platform {
     use tokio::time::sleep;
     use windows_platform::{
         DesktopCommand, DesktopControl, PlatformDesktopControl, current_process_session_id,
-        current_process_user_sid, named_pipe_server_is_local_system,
+        current_process_user_sid, named_pipe_server_is_service,
     };
 
     use super::ClientRequest;
 
     const PIPE_NAME: &str = r"\\.\pipe\RemoteControlHub.Agent.v2";
     const RECONNECT_DELAY: std::time::Duration = std::time::Duration::from_secs(2);
+    const SERVICE_NAME: &str = "RemoteControlHubAgent";
 
     pub async fn run(mut requests: mpsc::Receiver<ClientRequest>) {
         loop {
@@ -154,7 +155,17 @@ mod platform {
                 Ok(pipe) => {
                     let _ = run_connection(pipe, &mut requests).await;
                 }
-                Err(_) => sleep(RECONNECT_DELAY).await,
+                Err(error) => {
+                    tokio::select! {
+                        request = requests.recv() => {
+                            let Some(request) = request else {
+                                return;
+                            };
+                            let _ = request.response.send(Err(error));
+                        }
+                        _ = sleep(RECONNECT_DELAY) => {}
+                    }
+                }
             }
         }
     }
@@ -163,11 +174,11 @@ mod platform {
         let mut pipe = ClientOptions::new()
             .open(PIPE_NAME)
             .map_err(|_| "agent_service_unavailable".to_owned())?;
-        let is_system =
-            named_pipe_server_is_local_system(pipe.as_raw_handle()).map_err(str::to_owned)?;
+        let is_service = named_pipe_server_is_service(pipe.as_raw_handle(), SERVICE_NAME)
+            .map_err(str::to_owned)?;
         let development_override = cfg!(debug_assertions)
             && std::env::var("RCH_ALLOW_NON_SYSTEM_PIPE").as_deref() == Ok("1");
-        if !is_system && !development_override {
+        if !is_service && !development_override {
             return Err("agent_service_identity_invalid".to_owned());
         }
         let user_sid = current_process_user_sid().map_err(str::to_owned)?;

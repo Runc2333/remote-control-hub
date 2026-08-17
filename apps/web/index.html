@@ -33,39 +33,115 @@
     <script>
       (() => {
         const candidateKey = "rch-candidate-context";
-        const reportFailure = () => {
+        const failureKey = "rch-update-failure";
+        let failed = false;
+        let timeout;
+        const cleanup = () => {
+          window.clearTimeout(timeout);
+          window.removeEventListener("error", errorListener);
+          window.removeEventListener("unhandledrejection", rejectionListener);
+        };
+        const reportFailure = (reason, phase, source = {}) => {
+          if (failed) {
+            return;
+          }
           const serialized = sessionStorage.getItem(candidateKey);
           if (serialized === null) {
             return;
           }
+          let context;
           try {
-            const context = JSON.parse(serialized);
+            context = JSON.parse(serialized);
             if (
-              typeof context === "object" &&
-              context !== null &&
-              Number.isSafeInteger(context.generation) &&
-              typeof context.nonce === "string" &&
-              typeof context.releaseId === "string"
+              typeof context !== "object" ||
+              context === null ||
+              !Number.isSafeInteger(context.generation) ||
+              typeof context.nonce !== "string" ||
+              typeof context.releaseId !== "string"
             ) {
-              navigator.serviceWorker.controller?.postMessage({
-                ...context,
-                type: "FAIL_CANDIDATE",
-              });
+              return;
             }
-          } catch {}
+          } catch (error) {
+            context = {
+              generation: -1,
+              nonce: "invalid",
+              releaseId: "invalid",
+            };
+            reason = error;
+            phase = "candidate_context_parse";
+          }
+          failed = true;
+          cleanup();
+          const error = reason instanceof Error ? reason : undefined;
+          const failure = {
+            code: error?.message || "candidate_startup_failed",
+            message:
+              error?.message ||
+              (typeof reason === "string"
+                ? reason
+                : "Candidate startup failed without an Error object"),
+            name: error?.name || typeof reason,
+            occurredAt: new Date().toISOString(),
+            phase,
+            releaseId: context.releaseId,
+            stack: error?.stack,
+            userAgent: navigator.userAgent,
+            url: window.location.href,
+            ...source,
+          };
+          navigator.serviceWorker.controller?.postMessage({
+            ...context,
+            ...failure,
+            type: "FAIL_CANDIDATE",
+          });
+          sessionStorage.setItem(failureKey, JSON.stringify(failure));
           sessionStorage.removeItem(candidateKey);
+          window.dispatchEvent(
+            new CustomEvent("rch-update", {
+              detail: { ...failure, type: "UPDATE_FAILED" },
+            }),
+          );
           const root = document.getElementById("root");
           if (root !== null) {
             root.setAttribute("role", "alert");
-            root.textContent =
-              "新版本启动失败，当前版本将在下次打开时继续使用。";
+            const title = document.createElement("h1");
+            title.textContent = "新版本启动失败";
+            const summary = document.createElement("p");
+            summary.textContent =
+              "当前版本将在下次打开时继续使用。以下信息可用于排查：";
+            const details = document.createElement("pre");
+            details.style.whiteSpace = "pre-wrap";
+            details.style.wordBreak = "break-word";
+            details.textContent = JSON.stringify(failure, null, 2);
+            root.replaceChildren(title, summary, details);
           }
         };
-        window.addEventListener("error", reportFailure, { once: true });
-        window.addEventListener("unhandledrejection", reportFailure, {
-          once: true,
-        });
-        window.setTimeout(reportFailure, 15_000);
+        const errorListener = (event) =>
+          reportFailure(event.error || event.message, "window_error", {
+            column: event.colno,
+            line: event.lineno,
+            source: event.filename,
+          });
+        const rejectionListener = (event) =>
+          reportFailure(event.reason, "unhandled_rejection");
+        window.addEventListener("error", errorListener);
+        window.addEventListener("unhandledrejection", rejectionListener);
+        window.addEventListener(
+          "rch-candidate-startup-confirmed",
+          () => {
+            cleanup();
+            sessionStorage.removeItem(failureKey);
+          },
+          { once: true },
+        );
+        timeout = window.setTimeout(
+          () =>
+            reportFailure(
+              new Error("candidate_startup_timeout"),
+              "candidate_startup_timeout",
+            ),
+          15_000,
+        );
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
