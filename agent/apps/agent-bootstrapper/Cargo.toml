@@ -8,7 +8,7 @@ rust-version.workspace = true
 [dependencies]
 sha2 = "0.11.0"
 tempfile = "3.27.0"
-windows-platform = { version = "0.1.3", path = "../../crates/windows-platform" }
+windows-platform = { version = "0.1.4", path = "../../crates/windows-platform" }
 
 [build-dependencies]
 sha2 = "0.11.0"
