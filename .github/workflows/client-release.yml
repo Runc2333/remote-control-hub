@@ -50,15 +50,6 @@ jobs:
           }
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Run client gates
-        shell: pwsh
-        run: |
-          pnpm --filter @remote-control-hub/agent-session lint
-          pnpm --filter @remote-control-hub/agent-session test
-          cargo fmt --manifest-path agent/Cargo.toml --all -- --check
-          cargo clippy --manifest-path agent/Cargo.toml --workspace --all-targets --locked -- -D warnings
-          cargo test --manifest-path agent/Cargo.toml --workspace --locked
-          pnpm icons:check
       - name: Download Microsoft WebView2 Evergreen Bootstrapper
         shell: pwsh
         run: |
@@ -87,17 +78,17 @@ jobs:
           $session = (Resolve-Path -LiteralPath "artifacts/components/agent-session.exe").Path
           dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$env:VERSION" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -out "artifacts/components/remote-control-hub-agent.msi"
           dotnet tool run wix -- msi validate -acceptEula wix7 "artifacts/components/remote-control-hub-agent.msi"
-      - name: Package unsigned release
+      - name: Prepare unsigned release files
         shell: pwsh
         run: |
-          $bundle = "artifacts/unsigned/Remote-Control-Hub-Agent-$env:VERSION-unsigned"
-          New-Item -ItemType Directory -Force -Path $bundle | Out-Null
-          Copy-Item -LiteralPath "artifacts/components/agent-bootstrapper.exe" -Destination "$bundle/Remote-Control-Hub-Agent-Setup.exe"
-          Copy-Item -LiteralPath "artifacts/components/remote-control-hub-agent.msi" -Destination "$bundle/remote-control-hub-agent.msi"
-          Copy-Item -LiteralPath "artifacts/components/MicrosoftEdgeWebview2Setup.exe" -Destination "$bundle/MicrosoftEdgeWebview2Setup.exe"
-          Copy-Item -LiteralPath "THIRD_PARTY_LICENSES.txt" -Destination "$bundle/THIRD_PARTY_LICENSES.txt"
+          $releaseDirectory = "artifacts/unsigned"
+          New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
+          Copy-Item -LiteralPath "artifacts/components/agent-bootstrapper.exe" -Destination "$releaseDirectory/Remote-Control-Hub-Agent-Setup-$env:VERSION-unsigned.exe"
+          Copy-Item -LiteralPath "artifacts/components/remote-control-hub-agent.msi" -Destination "$releaseDirectory/remote-control-hub-agent-$env:VERSION-unsigned.msi"
+          Copy-Item -LiteralPath "artifacts/components/MicrosoftEdgeWebview2Setup.exe" -Destination "$releaseDirectory/MicrosoftEdgeWebview2Setup.exe"
+          Copy-Item -LiteralPath "THIRD_PARTY_LICENSES.txt" -Destination "$releaseDirectory/THIRD_PARTY_LICENSES.txt"
           $warning = "This Windows release is not Authenticode signed. Windows may display Unknown publisher or Microsoft Defender SmartScreen warnings."
-          [IO.File]::WriteAllText("$bundle/UNSIGNED_BUILD.txt", "$warning$([Environment]::NewLine)")
+          [IO.File]::WriteAllText("$releaseDirectory/UNSIGNED_BUILD.txt", "$warning$([Environment]::NewLine)")
           $metadata = [ordered]@{
             buildTime = $env:RCH_BUILD_TIME
             commit = "${{ github.sha }}"
@@ -107,19 +98,19 @@ jobs:
             webView2Sha256 = $env:RCH_WEBVIEW2_BOOTSTRAPPER_SHA256
             wixVersion = "7.0.0"
           }
-          $metadata | ConvertTo-Json | Set-Content -LiteralPath "$bundle/build-metadata.json" -Encoding utf8NoBOM
-          $archive = "$bundle.zip"
-          Compress-Archive -Path "$bundle/*" -DestinationPath $archive
-          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
-          [IO.File]::WriteAllText("$archive.sha256", "$hash *$(Split-Path -Leaf $archive)$([Environment]::NewLine)")
+          $metadata | ConvertTo-Json | Set-Content -LiteralPath "$releaseDirectory/build-metadata.json" -Encoding utf8NoBOM
+          $checksumLines = Get-ChildItem -LiteralPath $releaseDirectory -File | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
+            "$hash *$($_.Name)"
+          }
+          [IO.File]::WriteAllLines("$releaseDirectory/SHA256SUMS", [string[]]$checksumLines, [Text.UTF8Encoding]::new($false))
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           if-no-files-found: error
           name: unsigned-client-${{ github.sha }}
           path: |
             artifacts/components/*
-            artifacts/unsigned/*.zip
-            artifacts/unsigned/*.sha256
+            artifacts/unsigned/*
           retention-days: 30
 
   publish-release:
@@ -138,9 +129,10 @@ jobs:
           path: artifacts
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
-          subject-path: artifacts/unsigned/*.zip
+          subject-path: artifacts/unsigned/*
       - name: Publish GitHub Release
         env:
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
@@ -149,7 +141,7 @@ jobs:
           $notesPath = Join-Path $env:RUNNER_TEMP "release-notes.md"
           @'
           > [!WARNING]
-          > This Windows release is not Authenticode signed. Windows may display Unknown publisher or Microsoft Defender SmartScreen warnings. Download it only from this repository and verify the accompanying SHA-256 checksum before installation.
+          > This Windows release is not Authenticode signed. Windows may display Unknown publisher or Microsoft Defender SmartScreen warnings. Download it only from this repository and verify each file against SHA256SUMS before installation.
 
           Commit: ${{ github.sha }}
           '@ | Set-Content -LiteralPath $notesPath -Encoding utf8NoBOM

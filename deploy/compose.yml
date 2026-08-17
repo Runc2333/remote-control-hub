@@ -45,7 +45,7 @@ services:
 
   remote-control-hub-mysql:
     container_name: remote-control-hub-mysql
-    image: mysql:8.4.7@sha256:0426ec38c7a10aa45ba383887df7878f74ee70e2fd589c7b69207f3577901903
+    image: docker.1ms.run/mysql:8.4.7@sha256:0426ec38c7a10aa45ba383887df7878f74ee70e2fd589c7b69207f3577901903
     restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
@@ -71,7 +71,7 @@ services:
 
   remote-control-hub-redis:
     container_name: remote-control-hub-redis
-    image: redis:8.2.3-alpine@sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba
+    image: docker.1ms.run/redis:8.2.3-alpine@sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba
     restart: unless-stopped
     command:
       - redis-server

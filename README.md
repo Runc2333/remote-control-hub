@@ -3,7 +3,7 @@
 Remote Control Hub 是一个面向多用户的自托管 Windows 设备远程控制平台。它由 Web 管理端、Fastify 服务端以及 Windows Agent 组成，通过明确的命令白名单提供关闭显示器、系统音量和媒体播放控制，而不暴露任意命令执行、远程桌面或文件传输能力。
 
 > [!IMPORTANT]
-> 当前版本为 `0.1.0`，适合开发、集成测试和受控环境验证。正式部署前仍需准备域名、TLS、数据库备份、干净 Windows 虚拟机和真实硬件验收环境。Windows 发行物不进行 Authenticode 签名，安装时可能出现“未知发布者”或 SmartScreen 警告。
+> 当前版本为 `0.1.1`，适合开发、集成测试和受控环境验证。正式部署前仍需准备域名、TLS、数据库备份、干净 Windows 虚拟机和真实硬件验收环境。Windows 发行物不进行 Authenticode 签名，安装时可能出现“未知发布者”或 SmartScreen 警告。
 
 ## 目录
 
@@ -357,7 +357,7 @@ Redis 使用 AOF 和 `noeviction`。所有会话和认证中间态仍具有 TTL�
 | `DEPLOY_PATH`            | `/opt/remote-control-hub`                             |
 | `APP_URL`                | 稳定的 HTTPS Origin，如 `https://control.example.com` |
 
-生产部署只能手动运行 `server-deploy.yml`，并经过 `production-deploy` Environment 审批。工作流确认目标 commit 已通过 CI 后构建 Linux `amd64` 镜像，将镜像与同 commit 的 deployment bundle 压缩、分别计算 SHA-256，并直接通过 SSH/SCP 传到目标服务器。服务器验证摘要后使用 `docker image load` 导入本地不可变标签，因此不需要 GHCR、镜像仓库账号或拉取凭据。
+生产部署只能手动运行 `server-deploy.yml`，并经过 `production-deploy` Environment 审批。工作流直接构建所选 commit 的 Linux `amd64` 镜像，将镜像与同 commit 的 deployment bundle 压缩、分别计算 SHA-256，并直接通过 SSH/SCP 传到目标服务器。服务器验证摘要后使用 `docker image load` 导入本地不可变标签，因此不需要 GHCR、镜像仓库账号或拉取凭据。
 
 部署脚本先启动并等待项目专属 MySQL 与 Redis 容器健康，再读取安装和迁移状态；空服务器会继续进入受限首次安装模式，已安装服务器则先执行兼容迁移再切换应用容器。
 
@@ -371,9 +371,9 @@ Compose 只把服务暴露在 `http://127.0.0.1:51692`，不会监听公网 80/4
 
 ### 未签名 Windows 发布
 
-项目不配置 Windows 代码签名证书，也不需要 `code-signing` Environment、PFX Secret 或时间戳服务。`v*` 标签仍会构建 MSI 和 Bootstrapper，并发布名称带有 `unsigned` 的 ZIP、SHA-256 校验文件和 GitHub provenance。
+项目不配置 Windows 代码签名证书，也不需要 `code-signing` Environment、PFX Secret 或时间戳服务。`v*` 标签仍会构建 MSI 和 Bootstrapper，并把未签名安装器、WebView2 Bootstrapper、许可清单、构建元数据和 `SHA256SUMS` 作为独立文件发布，同时生成 GitHub provenance。
 
-GitHub Release、压缩包目录、`UNSIGNED_BUILD.txt` 和 `build-metadata.json` 都会明确标记产物未签名。用户应只从本仓库 Release 页面下载并在安装前核对 SHA-256。Windows 可能显示“未知发布者”或 Microsoft Defender SmartScreen 警告，企业应用控制策略也可能拒绝运行未签名程序。
+GitHub Release、产物文件名、`UNSIGNED_BUILD.txt` 和 `build-metadata.json` 都会明确标记产物未签名。用户应只从本仓库 Release 页面下载并在安装前核对 `SHA256SUMS`。Windows 可能显示“未知发布者”或 Microsoft Defender SmartScreen 警告，企业应用控制策略也可能拒绝运行未签名程序。
 
 WebView2 Bootstrapper 是独立的微软发行物。工作流仍校验该文件的 Microsoft Authenticode 签名和 SHA-256，再把摘要注入 Agent Bootstrapper；这不代表 Remote Control Hub 自身经过代码签名。
 
@@ -450,7 +450,7 @@ pnpm --filter @remote-control-hub/agent-session build
 dotnet tool restore
 ```
 
-MSI、Bootstrapper、WebView2 Bootstrapper 校验、SHA-256、provenance 和 Release 打包由 `client-release.yml` 完成。Remote Control Hub 的 EXE 与 MSI 保持未签名，压缩包名称和元数据会明确标注这一点。
+MSI、Bootstrapper、WebView2 Bootstrapper 校验、SHA-256、provenance 和 Release 独立文件发布由 `client-release.yml` 完成。Remote Control Hub 的 EXE 与 MSI 保持未签名，文件名和元数据会明确标注这一点。
 
 ### 注册设备
 

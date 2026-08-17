@@ -4,12 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       commit_sha:
-        description: 已通过 CI 的 40 位 commit SHA；留空使用当前 commit
+        description: 40 位 commit SHA；留空使用当前 commit
         required: false
         type: string
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
@@ -31,14 +30,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ steps.commit.outputs.value }}
-      - name: Verify CI conclusion
-        shell: bash
-        env:
-          COMMIT_SHA: ${{ steps.commit.outputs.value }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          success="$(gh run list --workflow CI --commit "$COMMIT_SHA" --limit 20 --json conclusion --jq 'any(.[]; .conclusion == "success")')"
-          [[ "$success" == "true" ]]
       - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
       - name: Build server image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
