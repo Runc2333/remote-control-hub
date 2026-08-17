@@ -187,12 +187,16 @@ export const registerServiceWorker = async (): Promise<
     localStorage.setItem(WORKER_CHECKED_AT_KEY, Date.now().toString());
     await registration.update();
   }
+  const candidateContext = readCandidateContext();
   scheduleCandidateTimeout();
   const retryAfter = Number.parseInt(
     localStorage.getItem(UPDATE_RETRY_AFTER_KEY) ?? "0",
     10,
   );
-  if (!Number.isSafeInteger(retryAfter) || retryAfter <= Date.now()) {
+  if (
+    candidateContext === undefined &&
+    (!Number.isSafeInteger(retryAfter) || retryAfter <= Date.now())
+  ) {
     const ready = await navigator.serviceWorker.ready;
     ready.active?.postMessage({ type: "START_UPDATE" });
   }

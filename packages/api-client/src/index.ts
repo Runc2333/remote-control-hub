@@ -64,7 +64,7 @@ export class ApiClient {
 
   public constructor(options: ApiClientOptions = {}) {
     this.#baseUrl = options.baseUrl ?? "";
-    this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
   public getHealth(): Promise<HealthResponse> {

@@ -1,7 +1,34 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "./index.js";
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("ApiClient", () => {
+  it("keeps the default fetch bound to the global object", async () => {
+    const fetch = vi.fn(function (this: typeof globalThis): Promise<Response> {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation");
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: "ok",
+            timestamp: "2026-08-17T00:00:00+08:00",
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const client = new ApiClient();
+
+    await expect(client.getHealth()).resolves.toMatchObject({ status: "ok" });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it("requests the health endpoint", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       new Response(
