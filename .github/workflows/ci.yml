@@ -82,4 +82,4 @@ jobs:
           $service = (Resolve-Path -LiteralPath "agent/target/x86_64-pc-windows-msvc/release/agent-service.exe").Path
           $session = (Resolve-Path -LiteralPath "agent/target/x86_64-pc-windows-msvc/release/agent-session.exe").Path
           dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$version" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -out "agent/target/x86_64-pc-windows-msvc/release/remote-control-hub-agent.msi"
-          dotnet tool run wix -- msi validate "agent/target/x86_64-pc-windows-msvc/release/remote-control-hub-agent.msi"
+          dotnet tool run wix -- msi validate -acceptEula wix7 "agent/target/x86_64-pc-windows-msvc/release/remote-control-hub-agent.msi"
