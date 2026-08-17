@@ -9,8 +9,13 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
-use url::{Host, Url};
-use windows_platform::{protect_machine_secret, unprotect_machine_secret};
+use url::Url;
+use windows_platform::unprotect_machine_secret;
+
+#[cfg(any(windows, test))]
+use url::Host;
+#[cfg(any(windows, test))]
+use windows_platform::protect_machine_secret;
 
 const PRIVATE_KEY_BYTES: usize = 32;
 
@@ -39,6 +44,7 @@ impl MachineIdentity {
     }
 }
 
+#[cfg(any(windows, test))]
 pub fn create_identity(
     device_id: String,
     service_origin: String,
@@ -53,6 +59,7 @@ pub fn create_identity(
     })
 }
 
+#[cfg(any(windows, test))]
 pub fn normalize_service_origin(
     value: &str,
     allow_loopback_http: bool,

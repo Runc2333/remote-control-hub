@@ -1,9 +1,14 @@
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::io;
+use std::path::PathBuf;
 
+#[cfg(any(windows, test))]
+use std::{fs::OpenOptions, io::Write, path::Path};
+
+#[cfg(any(windows, test))]
 use serde::{Deserialize, Serialize};
 
+#[cfg(any(windows, test))]
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalBinding {
@@ -19,6 +24,7 @@ impl LocalBindingStore {
         Self { path: path.into() }
     }
 
+    #[cfg(any(windows, test))]
     pub fn load(&self) -> io::Result<LocalBinding> {
         if !self.path.exists() {
             return Ok(LocalBinding::default());
@@ -28,6 +34,7 @@ impl LocalBindingStore {
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
     }
 
+    #[cfg(any(windows, test))]
     pub fn bind(&self, user_sid: &str) -> Result<(), &'static str> {
         let current = self.load().map_err(|_| "binding_load_failed")?;
         if let Some(bound) = current.bound_user_sid {
@@ -50,6 +57,7 @@ impl LocalBindingStore {
         Ok(())
     }
 
+    #[cfg(any(windows, test))]
     fn save(&self, binding: &LocalBinding) -> io::Result<()> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
@@ -71,7 +79,7 @@ impl LocalBindingStore {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, test))]
 fn sync_parent(path: &Path) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::File::open(parent)?.sync_all()?;
@@ -79,7 +87,7 @@ fn sync_parent(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), any(windows, test)))]
 fn sync_parent(_path: &Path) -> io::Result<()> {
     Ok(())
 }
