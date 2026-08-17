@@ -1,0 +1,22 @@
+[workspace]
+members = ["apps/agent-bootstrapper",
+  "apps/agent-service",
+  "apps/agent-session/src-tauri",
+  "crates/agent-core",
+  "crates/agent-ipc-protocol",
+  "crates/agent-wire",
+  "crates/windows-platform",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+rust-version = "1.93"
+
+[profile.release]
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

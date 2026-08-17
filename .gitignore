@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+.turbo/
+.vite/
+coverage/
+/plans/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+apps/web/public/app-version.json
+agent/apps/agent-session/src-tauri/gen/
+agent/apps/agent-session/src-tauri/icons/icon.icns

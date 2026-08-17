@@ -1,0 +1,85 @@
+{
+  "type": "object",
+  "required": [
+    "messageSequence",
+    "protocolVersion",
+    "commandId",
+    "commandType",
+    "createdAt",
+    "deviceId",
+    "expiresAt",
+    "initiatedByUserId",
+    "type"
+  ],
+  "properties": {
+    "messageSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "protocolVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "commandId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "commandType": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "display.turn_off"
+        },
+        {
+          "type": "string",
+          "const": "media.volume_up"
+        },
+        {
+          "type": "string",
+          "const": "media.volume_down"
+        },
+        {
+          "type": "string",
+          "const": "media.volume_mute_toggle"
+        },
+        {
+          "type": "string",
+          "const": "media.play_pause"
+        },
+        {
+          "type": "string",
+          "const": "media.previous_track"
+        },
+        {
+          "type": "string",
+          "const": "media.next_track"
+        },
+        {
+          "type": "string",
+          "const": "media.stop"
+        }
+      ]
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "deviceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "initiatedByUserId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "const": "command.execute"
+    }
+  },
+  "additionalProperties": false
+}

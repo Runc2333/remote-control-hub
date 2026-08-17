@@ -1,0 +1,106 @@
+name: remote-control-hub
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  server:
+    image: ${SERVER_IMAGE:?SERVER_IMAGE is required}
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DEPLOYMENT_MODE: compose
+      APP_ORIGIN: https://${APP_DOMAIN:?APP_DOMAIN is required}
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_HOST: mysql
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_PORT: "3306"
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      REDIS_DATABASE: ${REDIS_DATABASE:-0}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      REDIS_PORT: "6379"
+      RELEASE_ID: ${RELEASE_ID:?RELEASE_ID is required}
+      GEOIP_DATABASE: /run/data/GeoLite2-City.mmdb
+      OPERATIONS_AUDIT_FILE: /var/lib/remote-control-hub/operations-audit.jsonl
+      SETUP_CONFIG_FILE: /var/lib/remote-control-hub/setup-config.json
+      SETUP_SECRET_FILE: /var/lib/remote-control-hub/setup-secret.json
+      SETUP_STATE_FILE: /var/lib/remote-control-hub/setup-state.json
+      TOTP_KEYRING_FILE: /run/secrets/totp-keyring.json
+      TZ: Asia/Shanghai
+      WEB_ROOT: /opt/remote-control-hub/web
+    volumes:
+      - ${GEOIP_DATABASE_HOST:?GEOIP_DATABASE_HOST is required}:/run/data/GeoLite2-City.mmdb:ro
+      - server-state:/var/lib/remote-control-hub
+      - ${TOTP_KEYRING_FILE_HOST:?TOTP_KEYRING_FILE_HOST is required}:/run/secrets/totp-keyring.json:ro
+
+  mysql:
+    image: mysql:8.4.7@sha256:0426ec38c7a10aa45ba383887df7878f74ee70e2fd589c7b69207f3577901903
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?MYSQL_DATABASE is required}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_USER: ${MYSQL_USER:?MYSQL_USER is required}
+      TZ: Asia/Shanghai
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping --host=127.0.0.1 --user=root --password="$${MYSQL_ROOT_PASSWORD}" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  redis:
+    image: redis:8.2.3-alpine@sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba
+    restart: unless-stopped
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+      - --requirepass
+      - ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      TZ: Asia/Shanghai
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli --no-auth-warning --pass "$${REDIS_PASSWORD}" ping | grep PONG
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+
+volumes:
+  caddy-config:
+  caddy-data:
+  mysql-data:
+  redis-data:
+  server-state:

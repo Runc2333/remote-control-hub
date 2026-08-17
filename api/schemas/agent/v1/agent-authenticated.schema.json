@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "required": [
+    "messageSequence",
+    "protocolVersion",
+    "deviceId",
+    "generation",
+    "sessionId",
+    "type"
+  ],
+  "properties": {
+    "messageSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "protocolVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "deviceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "sessionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "const": "agent.authenticated"
+    }
+  },
+  "additionalProperties": false
+}

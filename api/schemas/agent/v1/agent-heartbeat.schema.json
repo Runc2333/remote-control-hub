@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "required": [
+    "messageSequence",
+    "protocolVersion",
+    "deviceId",
+    "sentAt",
+    "type"
+  ],
+  "properties": {
+    "messageSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "protocolVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "deviceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sentAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "type": {
+      "type": "string",
+      "const": "agent.heartbeat"
+    }
+  },
+  "additionalProperties": false
+}

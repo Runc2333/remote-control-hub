@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/contracts" },
+    { "path": "packages/api-client" },
+    { "path": "packages/ui" },
+    { "path": "apps/server" },
+    { "path": "apps/web/tsconfig.app.json" },
+    { "path": "apps/web/tsconfig.node.json" },
+    { "path": "apps/web/tsconfig.sw.json" },
+    { "path": "agent/apps/agent-session" }
+  ]
+}

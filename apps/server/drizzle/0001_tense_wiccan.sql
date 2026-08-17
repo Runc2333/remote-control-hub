@@ -1,0 +1,1 @@
+ALTER TABLE `devices` ADD `deleted_at` datetime(3);

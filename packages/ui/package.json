@@ -1,0 +1,31 @@
+{
+  "name": "@remote-control-hub/ui",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "vitest run --exclude=dist/**",
+    "build": "tsc -b",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/react-fontawesome": "^3.5.0"
+  },
+  "devDependencies": {
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@remote-control-hub/tsconfig": "workspace:*",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "vitest": "^4.1.10"
+  },
+  "peerDependencies": {
+    "react": "^19.2.8"
+  }
+}

@@ -1,0 +1,264 @@
+name: Client release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          cache: pnpm
+          node-version-file: .node-version
+      - name: Resolve release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $metadata = cargo metadata --manifest-path agent/Cargo.toml --locked --no-deps --format-version 1 | ConvertFrom-Json
+          $version = ($metadata.packages | Where-Object name -eq "agent-service").version
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $tag = "${{ github.ref_name }}"
+            if (-not $tag.StartsWith("v") -or $tag.Substring(1) -ne $version) {
+              throw "Tag version must match the Cargo workspace version."
+            }
+          }
+          $sessionPackageVersion = (Get-Content -LiteralPath "agent/apps/agent-session/package.json" | ConvertFrom-Json).version
+          $tauriVersion = (Get-Content -LiteralPath "agent/apps/agent-session/src-tauri/tauri.conf.json" | ConvertFrom-Json).version
+          if ($sessionPackageVersion -ne $version -or $tauriVersion -ne $version) {
+            throw "Agent package versions are inconsistent."
+          }
+          $buildTime = (Get-Date).ToUniversalTime().ToString("o")
+          "VERSION=$version" >> $env:GITHUB_ENV
+          "RCH_BUILD_COMMIT=${{ github.sha }}" >> $env:GITHUB_ENV
+          "RCH_BUILD_TIME=$buildTime" >> $env:GITHUB_ENV
+          $visibility = gh api "repos/${{ github.repository }}" --jq ".visibility"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to determine repository visibility."
+          }
+          if ($visibility -eq "public") {
+            "RCH_GITHUB_REPOSITORY=${{ github.repository }}" >> $env:GITHUB_ENV
+          }
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run client gates
+        shell: pwsh
+        run: |
+          pnpm --filter @remote-control-hub/agent-session lint
+          pnpm --filter @remote-control-hub/agent-session test
+          cargo fmt --manifest-path agent/Cargo.toml --all -- --check
+          cargo clippy --manifest-path agent/Cargo.toml --workspace --all-targets --locked -- -D warnings
+          cargo test --manifest-path agent/Cargo.toml --workspace --locked
+          pnpm icons:check
+      - name: Download Microsoft WebView2 Evergreen Bootstrapper
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "artifacts/components" | Out-Null
+          $path = "artifacts/components/MicrosoftEdgeWebview2Setup.exe"
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $path
+          $signature = Get-AuthenticodeSignature -LiteralPath $path
+          if ($signature.Status -ne "Valid" -or $signature.SignerCertificate.Subject -notmatch "Microsoft Corporation") {
+            throw "The WebView2 Bootstrapper signature is invalid."
+          }
+          $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
+          "RCH_WEBVIEW2_BOOTSTRAPPER_SHA256=$digest" >> $env:GITHUB_ENV
+      - name: Build Windows components
+        shell: pwsh
+        run: |
+          pnpm --filter @remote-control-hub/agent-session build
+          cargo build --manifest-path agent/Cargo.toml --workspace --locked --release
+          Copy-Item -LiteralPath "agent/target/release/agent-service.exe" -Destination "artifacts/components/agent-service.exe"
+          Copy-Item -LiteralPath "agent/target/release/agent-session.exe" -Destination "artifacts/components/agent-session.exe"
+          Copy-Item -LiteralPath "agent/target/release/agent-bootstrapper.exe" -Destination "artifacts/components/agent-bootstrapper.exe"
+      - name: Build unsigned candidate MSI
+        shell: pwsh
+        run: |
+          dotnet tool restore
+          $service = (Resolve-Path -LiteralPath "artifacts/components/agent-service.exe").Path
+          $session = (Resolve-Path -LiteralPath "artifacts/components/agent-session.exe").Path
+          dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$env:VERSION" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -out "artifacts/components/remote-control-hub-agent.msi"
+          dotnet tool run wix -- msi validate "artifacts/components/remote-control-hub-agent.msi"
+      - name: Package unsigned candidate
+        shell: pwsh
+        run: |
+          $bundle = "artifacts/unsigned/Remote-Control-Hub-Agent-$env:VERSION-unsigned"
+          New-Item -ItemType Directory -Force -Path $bundle | Out-Null
+          Copy-Item -LiteralPath "artifacts/components/agent-bootstrapper.exe" -Destination "$bundle/Remote-Control-Hub-Agent-Setup.exe"
+          Copy-Item -LiteralPath "artifacts/components/remote-control-hub-agent.msi" -Destination "$bundle/remote-control-hub-agent.msi"
+          Copy-Item -LiteralPath "artifacts/components/MicrosoftEdgeWebview2Setup.exe" -Destination "$bundle/MicrosoftEdgeWebview2Setup.exe"
+          Copy-Item -LiteralPath "THIRD_PARTY_LICENSES.txt" -Destination "$bundle/THIRD_PARTY_LICENSES.txt"
+          $metadata = [ordered]@{
+            buildTime = $env:RCH_BUILD_TIME
+            commit = "${{ github.sha }}"
+            signed = $false
+            version = $env:VERSION
+            webView2Sha256 = $env:RCH_WEBVIEW2_BOOTSTRAPPER_SHA256
+            wixVersion = "7.0.0"
+          }
+          $metadata | ConvertTo-Json | Set-Content -LiteralPath "$bundle/build-metadata.json" -Encoding utf8NoBOM
+          $archive = "$bundle.zip"
+          Compress-Archive -Path "$bundle/*" -DestinationPath $archive
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("$archive.sha256", "$hash *$(Split-Path -Leaf $archive)$([Environment]::NewLine)")
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          if-no-files-found: error
+          name: unsigned-client-${{ github.sha }}
+          path: |
+            artifacts/components/*
+            artifacts/unsigned/*.zip
+            artifacts/unsigned/*.sha256
+          retention-days: 14
+
+  sign-and-release:
+    if: github.ref_type == 'tag'
+    needs: build-unsigned
+    runs-on: windows-latest
+    environment: code-signing
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: write
+      id-token: write
+    env:
+      SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+      SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+      TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: unsigned-client-${{ github.sha }}
+          path: artifacts
+      - name: Resolve release metadata
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".Substring(1)
+          if ([string]::IsNullOrWhiteSpace($env:TIMESTAMP_URL)) {
+            "TIMESTAMP_URL=http://timestamp.digicert.com" >> $env:GITHUB_ENV
+          }
+          "VERSION=$version" >> $env:GITHUB_ENV
+      - name: Import signing certificate
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_BASE64) -or [string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_PASSWORD)) {
+            throw "Code-signing credentials are not configured."
+          }
+          $certificatePath = Join-Path $env:RUNNER_TEMP "remote-control-hub-signing.pfx"
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64))
+          $password = ConvertTo-SecureString $env:SIGNING_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificates = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item -LiteralPath $certificatePath -Force
+          $certificate = $certificates | Where-Object HasPrivateKey | Select-Object -First 1
+          if ($null -eq $certificate) {
+            throw "The PFX does not contain a private code-signing certificate."
+          }
+          $now = Get-Date
+          if ($certificate.NotBefore -gt $now -or $certificate.NotAfter -le $now) {
+            throw "The code-signing certificate is not currently valid."
+          }
+          if ($certificate.EnhancedKeyUsageList.ObjectId.Value -notcontains "1.3.6.1.5.5.7.3.3") {
+            throw "The certificate is not valid for code signing."
+          }
+          "SIGNING_THUMBPRINT=$($certificate.Thumbprint)" >> $env:GITHUB_ENV
+      - name: Sign component executables
+        shell: pwsh
+        run: |
+          $signTool = (Get-Command signtool.exe -ErrorAction Stop).Source
+          foreach ($path in @(
+            "artifacts/components/agent-service.exe",
+            "artifacts/components/agent-session.exe",
+            "artifacts/components/agent-bootstrapper.exe"
+          )) {
+            & $signTool sign /sha1 $env:SIGNING_THUMBPRINT /fd SHA256 /tr $env:TIMESTAMP_URL /td SHA256 $path
+            if ($LASTEXITCODE -ne 0) {
+              throw "Authenticode signing failed for $path."
+            }
+          }
+      - name: Build and sign MSI
+        shell: pwsh
+        run: |
+          dotnet tool restore
+          $service = (Resolve-Path -LiteralPath "artifacts/components/agent-service.exe").Path
+          $session = (Resolve-Path -LiteralPath "artifacts/components/agent-session.exe").Path
+          dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$env:VERSION" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -out "artifacts/components/remote-control-hub-agent.msi"
+          dotnet tool run wix -- msi validate "artifacts/components/remote-control-hub-agent.msi"
+          $signTool = (Get-Command signtool.exe -ErrorAction Stop).Source
+          & $signTool sign /sha1 $env:SIGNING_THUMBPRINT /fd SHA256 /tr $env:TIMESTAMP_URL /td SHA256 "artifacts/components/remote-control-hub-agent.msi"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Authenticode signing failed for the MSI."
+          }
+      - name: Verify signatures and package release
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            "artifacts/components/agent-service.exe",
+            "artifacts/components/agent-session.exe",
+            "artifacts/components/agent-bootstrapper.exe",
+            "artifacts/components/remote-control-hub-agent.msi"
+          )) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $path
+            if ($signature.Status -ne "Valid" -or $signature.SignerCertificate.Thumbprint -ne $env:SIGNING_THUMBPRINT) {
+              throw "Signature verification failed for $path."
+            }
+          }
+          $webViewSignature = Get-AuthenticodeSignature -LiteralPath "artifacts/components/MicrosoftEdgeWebview2Setup.exe"
+          if ($webViewSignature.Status -ne "Valid" -or $webViewSignature.SignerCertificate.Subject -notmatch "Microsoft Corporation") {
+            throw "The WebView2 Bootstrapper signature is invalid."
+          }
+          $bundle = "artifacts/signed/Remote-Control-Hub-Agent-$env:VERSION"
+          New-Item -ItemType Directory -Force -Path $bundle | Out-Null
+          Copy-Item -LiteralPath "artifacts/components/agent-bootstrapper.exe" -Destination "$bundle/Remote-Control-Hub-Agent-Setup.exe"
+          Copy-Item -LiteralPath "artifacts/components/remote-control-hub-agent.msi" -Destination "$bundle/remote-control-hub-agent.msi"
+          Copy-Item -LiteralPath "artifacts/components/MicrosoftEdgeWebview2Setup.exe" -Destination "$bundle/MicrosoftEdgeWebview2Setup.exe"
+          Copy-Item -LiteralPath "THIRD_PARTY_LICENSES.txt" -Destination "$bundle/THIRD_PARTY_LICENSES.txt"
+          $metadata = [ordered]@{
+            commit = "${{ github.sha }}"
+            signed = $true
+            version = $env:VERSION
+            wixVersion = "7.0.0"
+          }
+          $metadata | ConvertTo-Json | Set-Content -LiteralPath "$bundle/build-metadata.json" -Encoding utf8NoBOM
+          $archive = "$bundle.zip"
+          Compress-Archive -Path "$bundle/*" -DestinationPath $archive
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText("$archive.sha256", "$hash *$(Split-Path -Leaf $archive)$([Environment]::NewLine)")
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: artifacts/signed/*.zip
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          if-no-files-found: error
+          name: signed-client-${{ github.ref_name }}
+          path: |
+            artifacts/signed/*.zip
+            artifacts/signed/*.sha256
+          retention-days: 30
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $assets = Get-ChildItem -LiteralPath "artifacts/signed" -File | ForEach-Object FullName
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag @assets --clobber
+          } else {
+            gh release create $tag @assets --verify-tag --generate-notes --title $tag
+          }
+      - name: Remove signing certificate
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_THUMBPRINT)) {
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$env:SIGNING_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+          }

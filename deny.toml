@@ -1,0 +1,41 @@
+[graph]
+targets = ["x86_64-pc-windows-msvc"]
+
+[advisories]
+ignore = [
+  { id = "RUSTSEC-2025-0075", reason = "Tauri transitive Unicode range crate is unmaintained without a safe upgrade; review by 2026-11-15" },
+  { id = "RUSTSEC-2025-0080", reason = "Tauri transitive Unicode common crate is unmaintained without a safe upgrade; review by 2026-11-15" },
+  { id = "RUSTSEC-2025-0081", reason = "Tauri transitive Unicode property crate is unmaintained without a safe upgrade; review by 2026-11-15" },
+  { id = "RUSTSEC-2025-0098", reason = "Tauri transitive Unicode version crate is unmaintained without a safe upgrade; review by 2026-11-15" },
+  { id = "RUSTSEC-2025-0100", reason = "Tauri transitive Unicode identifier crate is unmaintained without a safe upgrade; review by 2026-11-15" },
+]
+
+[licenses]
+allow = [
+  "0BSD",
+  "AGPL-3.0-only",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+ignore = false
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

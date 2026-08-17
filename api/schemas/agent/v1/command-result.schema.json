@@ -1,0 +1,109 @@
+{
+  "type": "object",
+  "required": [
+    "messageSequence",
+    "protocolVersion",
+    "commandId",
+    "status",
+    "type"
+  ],
+  "properties": {
+    "messageSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "protocolVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "commandId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "errorCode": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "device_offline"
+        },
+        {
+          "type": "string",
+          "const": "unsupported"
+        },
+        {
+          "type": "string",
+          "const": "interactive_session_unavailable"
+        },
+        {
+          "type": "string",
+          "const": "multiple_sessions_unsupported"
+        },
+        {
+          "type": "string",
+          "const": "local_user_mismatch"
+        },
+        {
+          "type": "string",
+          "const": "device_disabled"
+        },
+        {
+          "type": "string",
+          "const": "device_credentials_revoked"
+        },
+        {
+          "type": "string",
+          "const": "device_deleted"
+        },
+        {
+          "type": "string",
+          "const": "owner_deleted"
+        },
+        {
+          "type": "string",
+          "const": "execution_failed"
+        }
+      ]
+    },
+    "status": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "created"
+        },
+        {
+          "type": "string",
+          "const": "sent"
+        },
+        {
+          "type": "string",
+          "const": "accepted"
+        },
+        {
+          "type": "string",
+          "const": "executing"
+        },
+        {
+          "type": "string",
+          "const": "succeeded"
+        },
+        {
+          "type": "string",
+          "const": "failed"
+        },
+        {
+          "type": "string",
+          "const": "expired"
+        },
+        {
+          "type": "string",
+          "const": "outcome_unknown"
+        }
+      ]
+    },
+    "type": {
+      "type": "string",
+      "const": "command.result"
+    }
+  },
+  "additionalProperties": false
+}

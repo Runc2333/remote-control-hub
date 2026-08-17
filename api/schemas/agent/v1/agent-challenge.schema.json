@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "required": [
+    "messageSequence",
+    "protocolVersion",
+    "deviceId",
+    "expiresAt",
+    "nonce",
+    "sessionId",
+    "type"
+  ],
+  "properties": {
+    "messageSequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "protocolVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "deviceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "sessionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "const": "agent.challenge"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,76 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Remote Control Hub Agent"
+    Manufacturer="Remote Control Hub"
+    Version="$(var.ProductVersion)"
+    Language="2052"
+    UpgradeCode="B7BD57A2-88CB-4ED9-924B-94BCF74EDCF3"
+    Scope="perMachine"
+  >
+    <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 Remote Control Hub Agent。" />
+    <MediaTemplate EmbedCab="yes" />
+    <Property Id="RCH_ENROLLMENT_SECRET_DIGEST" Hidden="yes" Secure="yes" />
+    <Launch Condition="RCH_ENROLLMENT_SECRET_DIGEST" Message="安装引导程序未提供 enrollment secret 摘要。" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Remote Control Hub Agent">
+        <Component Id="AgentServiceComponent" Guid="*">
+          <File
+            Id="AgentServiceExe"
+            Source="$(var.AgentServicePath)"
+            KeyPath="yes"
+          />
+          <ServiceInstall
+            Id="AgentServiceInstall"
+            Name="RemoteControlHubAgent"
+            DisplayName="Remote Control Hub Agent"
+            Description="Maintains the authenticated Remote Control Hub device connection."
+            Type="ownProcess"
+            Start="auto"
+            ErrorControl="normal"
+            Account="LocalSystem"
+          />
+          <ServiceControl
+            Id="AgentServiceControl"
+            Name="RemoteControlHubAgent"
+            Start="install"
+            Stop="both"
+            Remove="uninstall"
+            Wait="yes"
+          />
+        </Component>
+        <Component Id="EnrollmentSecretComponent" Guid="*">
+          <RegistryValue
+            Root="HKLM"
+            Key="Software\RemoteControlHub\Agent"
+            Name="EnrollmentSecretDigest"
+            Type="string"
+            Value="[RCH_ENROLLMENT_SECRET_DIGEST]"
+            KeyPath="yes"
+          >
+            <PermissionEx Sddl="D:P(A;;KA;;;SY)(A;;KA;;;BA)" />
+          </RegistryValue>
+        </Component>
+        <Component
+          Id="AgentSessionComponent"
+          Guid="E63B6A4A-708F-4B8B-BE47-29C0DF9BB4C4"
+        >
+          <File Id="AgentSessionExe" Source="$(var.AgentSessionPath)" KeyPath="yes" />
+          <RegistryValue
+            Root="HKLM"
+            Key="Software\Microsoft\Windows\CurrentVersion\Run"
+            Name="RemoteControlHubAgent"
+            Type="string"
+            Value="&quot;[#AgentSessionExe]&quot;"
+          />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Complete" Title="Remote Control Hub Agent" Level="1">
+      <ComponentRef Id="AgentServiceComponent" />
+      <ComponentRef Id="EnrollmentSecretComponent" />
+      <ComponentRef Id="AgentSessionComponent" />
+    </Feature>
+  </Package>
+</Wix>

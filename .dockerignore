@@ -1,0 +1,13 @@
+.git
+.github
+.husky
+**/dist
+**/node_modules
+**/target
+**/*.tsbuildinfo
+agent
+coverage
+plans
+state
+*.log
+.env*

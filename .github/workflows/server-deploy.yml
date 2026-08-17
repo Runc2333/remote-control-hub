@@ -1,0 +1,165 @@
+name: Server image and deployment
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 已通过 CI 的 40 位 commit SHA；留空使用当前 commit
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      bundle-sha256: ${{ steps.bundle.outputs.sha256 }}
+      commit: ${{ steps.commit.outputs.value }}
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.image.outputs.value }}
+    steps:
+      - id: commit
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit_sha }}
+          WORKFLOW_COMMIT: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          value="${REQUESTED_COMMIT:-${WORKFLOW_COMMIT:-$GITHUB_SHA}}"
+          [[ "$value" =~ ^[a-f0-9]{40}$ ]]
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ steps.commit.outputs.value }}
+      - name: Verify CI conclusion
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ steps.commit.outputs.value }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          success="$(gh run list --workflow CI --commit "$COMMIT_SHA" --limit 20 --json conclusion --jq 'any(.[]; .conclusion == "success")')"
+          [[ "$success" == "true" ]]
+      - id: image
+        shell: bash
+        run: echo "value=${REGISTRY}/${GITHUB_REPOSITORY,,}-server" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+      - uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
+        with:
+          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+      - id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
+        with:
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          context: .
+          platforms: linux/amd64
+          provenance: mode=max
+          push: true
+          tags: |
+            ${{ steps.image.outputs.value }}:sha-${{ steps.commit.outputs.value }}
+            ${{ steps.image.outputs.value }}:main
+      - id: bundle
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ steps.commit.outputs.value }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p artifact
+          printf '{"commit":"%s","imageDigest":"%s"}\n' "$COMMIT_SHA" "$IMAGE_DIGEST" > deploy/source.json
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C deploy -czf artifact/deployment-bundle.tar.gz .
+          sha256sum artifact/deployment-bundle.tar.gz | tee artifact/deployment-bundle.tar.gz.sha256
+          echo "sha256=$(cut -d' ' -f1 artifact/deployment-bundle.tar.gz.sha256)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          if-no-files-found: error
+          name: server-deployment-${{ steps.commit.outputs.value }}
+          path: artifact/
+          retention-days: 30
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch'
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: production-deploy
+    concurrency:
+      cancel-in-progress: false
+      group: production
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: server-deployment-${{ needs.publish.outputs.commit }}
+          path: artifact
+      - name: Verify deployment bundle
+        shell: bash
+        env:
+          EXPECTED_SHA256: ${{ needs.publish.outputs.bundle-sha256 }}
+        run: |
+          actual="$(sha256sum artifact/deployment-bundle.tar.gz | cut -d' ' -f1)"
+          [[ "$actual" == "$EXPECTED_SHA256" ]]
+      - name: Prepare SSH
+        shell: bash
+        env:
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        run: |
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Upload deployment bundle
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          COMMIT_SHA: ${{ needs.publish.outputs.commit }}
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH/incoming' '$DEPLOY_PATH/releases'"
+          scp -P "$DEPLOY_PORT" artifact/deployment-bundle.tar.gz "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/incoming/$COMMIT_SHA.tar.gz"
+      - name: Deploy immutable image
+        shell: bash
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          BUNDLE_SHA256: ${{ needs.publish.outputs.bundle-sha256 }}
+          COMMIT_SHA: ${{ needs.publish.outputs.commit }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          IMAGE_REFERENCE: ${{ needs.publish.outputs.image }}@${{ needs.publish.outputs.digest }}
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$DEPLOY_PATH" "$COMMIT_SHA" "$BUNDLE_SHA256" "$IMAGE_REFERENCE" "$APP_URL" <<'REMOTE'
+          set -Eeuo pipefail
+          deploy_root="$1"
+          commit_sha="$2"
+          bundle_sha256="$3"
+          image_reference="$4"
+          app_url="$5"
+          archive="$deploy_root/incoming/$commit_sha.tar.gz"
+          release_directory="$deploy_root/releases/$commit_sha"
+          actual_sha256="$(sha256sum "$archive" | cut -d' ' -f1)"
+          [[ "$actual_sha256" == "$bundle_sha256" ]]
+          [[ ! -e "$release_directory" ]]
+          mkdir -m 0700 "$release_directory"
+          tar -xzf "$archive" -C "$release_directory"
+          bash "$release_directory/scripts/deploy.sh" "$deploy_root" "$release_directory" "$image_reference" "$commit_sha" "$bundle_sha256" "$app_url"
+          bash "$release_directory/scripts/prune-releases.sh" "$deploy_root" 5
+          rm -f "$archive"
+          REMOTE

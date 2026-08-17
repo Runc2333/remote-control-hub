@@ -1,0 +1,30 @@
+Font Awesome Free 7.3.1
+Copyright Fonticons, Inc.
+Icons: CC BY 4.0
+Code: MIT License
+Fonts: SIL OFL 1.1
+https://fontawesome.com/license/free
+
+MaxMind GeoIP2 Node 7.1.0
+Copyright MaxMind, Inc.
+Apache License 2.0
+https://github.com/maxmind/GeoIP2-node
+
+UAParser.js 2.0.10
+Copyright Faisal Salman
+GNU Affero General Public License 3.0 or later
+https://uaparser.dev
+
+SimpleWebAuthn Server 13.3.2
+MIT License
+https://simplewebauthn.dev
+
+sharp 0.35.3
+Copyright Lovell Fuller and contributors
+Apache License 2.0
+https://sharp.pixelplumbing.com
+
+Tauri 2
+Copyright Tauri Programme within The Commons Conservancy
+Apache License 2.0 or MIT License
+https://tauri.app

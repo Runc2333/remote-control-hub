@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+  - agent/apps/*
+
+onlyBuiltDependencies:
+  - "@fortawesome/fontawesome-common-types"
+  - argon2
+  - esbuild
+  - husky

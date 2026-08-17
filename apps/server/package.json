@@ -1,0 +1,45 @@
+{
+  "name": "@remote-control-hub/server",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "vitest run --exclude=dist/**",
+    "build": "tsc -b",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -b --pretty false",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:check": "drizzle-kit check --config drizzle.config.ts",
+    "cli": "node dist/cli/index.js"
+  },
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/csrf-protection": "^8.0.1",
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/static": "10.1.3",
+    "@fastify/swagger": "^9.8.1",
+    "@fastify/type-provider-typebox": "^6.1.0",
+    "@fastify/websocket": "^11.3.0",
+    "@maxmind/geoip2-node": "^7.1.0",
+    "@remote-control-hub/contracts": "workspace:*",
+    "@simplewebauthn/server": "^13.3.2",
+    "argon2": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.12.0",
+    "fastify-plugin": "^6.0.0",
+    "ioredis": "^6.0.0",
+    "libphonenumber-js": "^1.13.11",
+    "mysql2": "^3.23.3",
+    "otpauth": "^9.5.1",
+    "typebox": "^1.3.14",
+    "ua-parser-js": "^2.0.10"
+  },
+  "devDependencies": {
+    "@remote-control-hub/tsconfig": "workspace:*",
+    "drizzle-kit": "^0.31.10",
+    "vitest": "^4.1.10"
+  }
+}

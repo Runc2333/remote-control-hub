@@ -1,0 +1,14 @@
+{
+  "extends": "@remote-control-hub/tsconfig/react.json",
+  "compilerOptions": {
+    "outDir": "./node_modules/.tmp/app-types",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "types": ["vite/client"]
+  },
+  "include": ["src"],
+  "exclude": ["src/sw.ts"],
+  "references": [
+    { "path": "../../packages/api-client" },
+    { "path": "../../packages/ui" }
+  ]
+}

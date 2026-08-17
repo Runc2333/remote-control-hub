@@ -1,0 +1,12 @@
+{
+  "extends": "@remote-control-hub/tsconfig/base.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "lib": ["ES2023", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "outDir": "./node_modules/.tmp/sw-types",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.sw.tsbuildinfo"
+  },
+  "include": ["src/sw.ts"]
+}

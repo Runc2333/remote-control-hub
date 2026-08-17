@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/icons/192x192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0f766e" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #f5f7f8;
+        color: #17202a;
+        font-family: system-ui, sans-serif;
+      }
+      .startup-shell {
+        padding: 20px;
+      }
+    </style>
+    <title>Remote Control Hub</title>
+  </head>
+  <body>
+    <div id="root">
+      <div class="startup-shell" role="status">
+        正在启动 Remote Control Hub…
+      </div>
+    </div>
+    <script>
+      (() => {
+        const candidateKey = "rch-candidate-context";
+        const reportFailure = () => {
+          const serialized = sessionStorage.getItem(candidateKey);
+          if (serialized === null) {
+            return;
+          }
+          try {
+            const context = JSON.parse(serialized);
+            if (
+              typeof context === "object" &&
+              context !== null &&
+              Number.isSafeInteger(context.generation) &&
+              typeof context.nonce === "string" &&
+              typeof context.releaseId === "string"
+            ) {
+              navigator.serviceWorker.controller?.postMessage({
+                ...context,
+                type: "FAIL_CANDIDATE",
+              });
+            }
+          } catch {}
+          sessionStorage.removeItem(candidateKey);
+          const root = document.getElementById("root");
+          if (root !== null) {
+            root.setAttribute("role", "alert");
+            root.textContent =
+              "新版本启动失败，当前版本将在下次打开时继续使用。";
+          }
+        };
+        window.addEventListener("error", reportFailure, { once: true });
+        window.addEventListener("unhandledrejection", reportFailure, {
+          once: true,
+        });
+        window.setTimeout(reportFailure, 15_000);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

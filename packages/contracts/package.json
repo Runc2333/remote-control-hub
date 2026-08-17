@@ -1,0 +1,23 @@
+{
+  "name": "@remote-control-hub/contracts",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "vitest run --exclude=dist/**",
+    "build": "tsc -b",
+    "lint": "eslint src scripts --max-warnings=0",
+    "typecheck": "tsc -b --pretty false",
+    "generate": "tsx scripts/generate.ts"
+  },
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "typebox": "^1.3.14"
+  },
+  "devDependencies": {
+    "@remote-control-hub/tsconfig": "workspace:*",
+    "vitest": "^4.1.10"
+  }
+}

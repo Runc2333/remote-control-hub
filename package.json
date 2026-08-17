@@ -1,0 +1,35 @@
+{
+  "name": "remote-control-hub",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "pnpm -r --if-present test && cargo test --manifest-path agent/Cargo.toml --workspace --locked",
+    "prepare": "husky",
+    "lint": "eslint . --max-warnings=0 && cargo fmt --manifest-path agent/Cargo.toml --all -- --check && cargo clippy --manifest-path agent/Cargo.toml --workspace --all-targets --locked -- -D warnings",
+    "typecheck": "tsc -b",
+    "build": "pnpm -r --if-present build && cargo build --manifest-path agent/Cargo.toml --workspace --locked",
+    "format:check": "prettier --check . && cargo fmt --manifest-path agent/Cargo.toml --all -- --check",
+    "contracts:generate": "pnpm --filter @remote-control-hub/contracts generate",
+    "contracts:check": "pnpm contracts:generate && git diff --exit-code -- api",
+    "pwa:check": "node scripts/verify-pwa.mjs",
+    "icons:generate": "node scripts/generate-icon-source.mjs && pnpm --filter @remote-control-hub/agent-session tauri icon ../../../assets/app-icon.svg --output src-tauri/icons",
+    "icons:check": "pnpm icons:generate && node scripts/verify-icons.mjs && git diff --exit-code -- assets apps/web/public/icons agent/apps/agent-session/src-tauri/icons",
+    "licenses:check": "node scripts/check-npm-licenses.mjs"
+  },
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@10.30.3",
+  "private": true,
+  "devDependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@remote-control-hub/eslint-config": "workspace:*",
+    "@types/node": "^24.13.3",
+    "eslint": "^10.8.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6",
+    "sharp": "^0.35.3",
+    "tsx": "^4.23.12",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

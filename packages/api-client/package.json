@@ -1,0 +1,22 @@
+{
+  "name": "@remote-control-hub/api-client",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "vitest run --exclude=dist/**",
+    "build": "tsc -b",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@remote-control-hub/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@remote-control-hub/tsconfig": "workspace:*",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,1319 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Remote Control Hub API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/admin/registration": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Registration policy"
+          }
+        }
+      },
+      "put": {
+        "responses": {
+          "200": {
+            "description": "Updated registration policy"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Created user"
+          }
+        }
+      }
+    },
+    "/api/v1/agent/register": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Registered agent"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "CSRF token"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Authenticated"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Registered user"
+          }
+        }
+      }
+    },
+    "/api/v1/commands": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Created command batch"
+          }
+        }
+      }
+    },
+    "/api/v1/devices": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Owned devices"
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-tokens": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Created enrollment token"
+          }
+        }
+      }
+    },
+    "/api/v1/meta/version": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Version metadata"
+          }
+        }
+      }
+    },
+    "/api/v1/setup/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Setup status"
+          }
+        }
+      }
+    },
+    "/api/v1/setup/test-data-service": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Data service test result"
+          }
+        }
+      }
+    },
+    "/api/v1/setup/complete": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Completed setup status"
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Process health"
+          }
+        }
+      }
+    },
+    "/operationalz": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Operational"
+          },
+          "503": {
+            "description": "Not operational"
+          }
+        }
+      }
+    }
+  },
+  "x-schemas": {
+    "adminCreateUserRequest": {
+      "type": "object",
+      "required": [
+        "identifier",
+        "identifierType"
+      ],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 320
+        },
+        "identifierType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "email"
+            },
+            {
+              "type": "string",
+              "const": "phone"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "adminCreateUserResponse": {
+      "type": "object",
+      "required": [
+        "temporaryPassword",
+        "temporaryPasswordExpiresAt",
+        "userId"
+      ],
+      "properties": {
+        "temporaryPassword": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 256
+        },
+        "temporaryPasswordExpiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "userId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "changePasswordRequest": {
+      "type": "object",
+      "required": [
+        "currentPassword",
+        "newPassword"
+      ],
+      "properties": {
+        "currentPassword": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "newPassword": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 256
+        }
+      },
+      "additionalProperties": false
+    },
+    "commandBatchResponse": {
+      "type": "object",
+      "required": [
+        "batchId",
+        "results"
+      ],
+      "properties": {
+        "batchId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "commandId",
+              "deviceId",
+              "status"
+            ],
+            "properties": {
+              "commandId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "deviceId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "errorCode": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "device_offline"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unsupported"
+                  },
+                  {
+                    "type": "string",
+                    "const": "interactive_session_unavailable"
+                  },
+                  {
+                    "type": "string",
+                    "const": "multiple_sessions_unsupported"
+                  },
+                  {
+                    "type": "string",
+                    "const": "local_user_mismatch"
+                  },
+                  {
+                    "type": "string",
+                    "const": "device_disabled"
+                  },
+                  {
+                    "type": "string",
+                    "const": "device_credentials_revoked"
+                  },
+                  {
+                    "type": "string",
+                    "const": "device_deleted"
+                  },
+                  {
+                    "type": "string",
+                    "const": "owner_deleted"
+                  },
+                  {
+                    "type": "string",
+                    "const": "execution_failed"
+                  }
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "created"
+                  },
+                  {
+                    "type": "string",
+                    "const": "sent"
+                  },
+                  {
+                    "type": "string",
+                    "const": "accepted"
+                  },
+                  {
+                    "type": "string",
+                    "const": "executing"
+                  },
+                  {
+                    "type": "string",
+                    "const": "succeeded"
+                  },
+                  {
+                    "type": "string",
+                    "const": "failed"
+                  },
+                  {
+                    "type": "string",
+                    "const": "expired"
+                  },
+                  {
+                    "type": "string",
+                    "const": "outcome_unknown"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "maxItems": 100
+        }
+      },
+      "additionalProperties": false
+    },
+    "createCommandBatchRequest": {
+      "type": "object",
+      "required": [
+        "commandType",
+        "deviceIds",
+        "idempotencyKey"
+      ],
+      "properties": {
+        "commandType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "display.turn_off"
+            },
+            {
+              "type": "string",
+              "const": "media.volume_up"
+            },
+            {
+              "type": "string",
+              "const": "media.volume_down"
+            },
+            {
+              "type": "string",
+              "const": "media.volume_mute_toggle"
+            },
+            {
+              "type": "string",
+              "const": "media.play_pause"
+            },
+            {
+              "type": "string",
+              "const": "media.previous_track"
+            },
+            {
+              "type": "string",
+              "const": "media.next_track"
+            },
+            {
+              "type": "string",
+              "const": "media.stop"
+            }
+          ]
+        },
+        "deviceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "createEnrollmentTokenResponse": {
+      "type": "object",
+      "required": [
+        "expiresAt",
+        "token"
+      ],
+      "properties": {
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "token": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "csrfTokenResponse": {
+      "type": "object",
+      "required": [
+        "csrfToken"
+      ],
+      "properties": {
+        "csrfToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "additionalProperties": false
+    },
+    "deviceListResponse": {
+      "type": "object",
+      "required": [
+        "devices"
+      ],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "capabilities",
+              "computerName",
+              "id",
+              "online",
+              "serviceVersion",
+              "sessionVersion"
+            ],
+            "properties": {
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "display.turn_off"
+                    },
+                    {
+                      "type": "string",
+                      "const": "media.volume_up"
+                    },
+                    {
+                      "type": "string",
+                      "const": "media.volume_down"
+                    },
+                    {
+                      "type": "string",
+                      "const": "media.volume_mute_toggle"
+                    },
+                    {
+                      "type": "string",
+                      "const": "media.play_pause"
+                    },
+                    {
+                      "type": "string",
+                      "const": "media.previous_track"
+                    },
+                    {
+                      "type": "string",
+                      "const": "media.next_track"
+                    },
+                    {
+                      "type": "string",
+                      "const": "media.stop"
+                    }
+                  ]
+                },
+                "uniqueItems": true
+              },
+              "computerName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "lastActiveAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "online": {
+                "type": "boolean"
+              },
+              "serviceVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "sessionVersion": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "additionalProperties": false
+          },
+          "maxItems": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "health": {
+      "type": "object",
+      "required": [
+        "status",
+        "timestamp"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "ok"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "loginRequest": {
+      "type": "object",
+      "required": [
+        "identifier",
+        "identifierType",
+        "password"
+      ],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 320
+        },
+        "identifierType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "email"
+            },
+            {
+              "type": "string",
+              "const": "phone"
+            }
+          ]
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "additionalProperties": false
+    },
+    "loginResponse": {
+      "type": "object",
+      "required": [
+        "requiresPasswordChange",
+        "requiresTotp",
+        "role"
+      ],
+      "properties": {
+        "requiresPasswordChange": {
+          "type": "boolean"
+        },
+        "requiresTotp": {
+          "type": "boolean"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "admin"
+            },
+            {
+              "type": "string",
+              "const": "user"
+            }
+          ]
+        },
+        "session": {
+          "type": "object",
+          "required": [
+            "authStrength",
+            "browser",
+            "createdAt",
+            "current",
+            "deviceType",
+            "expiresAt",
+            "id",
+            "ipAddress",
+            "lastActiveAt",
+            "location",
+            "operatingSystem",
+            "role"
+          ],
+          "properties": {
+            "authStrength": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "password"
+                },
+                {
+                  "type": "string",
+                  "const": "password_totp"
+                },
+                {
+                  "type": "string",
+                  "const": "password_recovery"
+                },
+                {
+                  "type": "string",
+                  "const": "passkey"
+                }
+              ]
+            },
+            "browser": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "deviceType": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "expiresAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "ipAddress": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "lastActiveAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "location": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "operatingSystem": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "role": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "admin"
+                },
+                {
+                  "type": "string",
+                  "const": "user"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "metaVersion": {
+      "type": "object",
+      "required": [
+        "apiVersion",
+        "minimumWebRelease",
+        "releaseId",
+        "workerProtocolVersion"
+      ],
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "v1"
+        },
+        "minimumWebRelease": {
+          "type": "string",
+          "minLength": 1
+        },
+        "releaseId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workerProtocolVersion": {
+          "type": "number",
+          "const": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "operationalUnavailable": {
+      "type": "object",
+      "required": [
+        "reason",
+        "status",
+        "timestamp"
+      ],
+      "properties": {
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "setup_incomplete"
+            },
+            {
+              "type": "string",
+              "const": "dependency_unavailable"
+            }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "const": "unavailable"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "registerAgentRequest": {
+      "type": "object",
+      "required": [
+        "capabilities",
+        "computerName",
+        "enrollmentToken",
+        "platform",
+        "publicKey",
+        "serviceVersion",
+        "sessionVersion"
+      ],
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "display.turn_off"
+              },
+              {
+                "type": "string",
+                "const": "media.volume_up"
+              },
+              {
+                "type": "string",
+                "const": "media.volume_down"
+              },
+              {
+                "type": "string",
+                "const": "media.volume_mute_toggle"
+              },
+              {
+                "type": "string",
+                "const": "media.play_pause"
+              },
+              {
+                "type": "string",
+                "const": "media.previous_track"
+              },
+              {
+                "type": "string",
+                "const": "media.next_track"
+              },
+              {
+                "type": "string",
+                "const": "media.stop"
+              }
+            ]
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "computerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "enrollmentToken": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "platform": {
+          "type": "string",
+          "const": "windows"
+        },
+        "publicKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "serviceVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "sessionVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "additionalProperties": false
+    },
+    "registerAgentResponse": {
+      "type": "object",
+      "required": [
+        "deviceId"
+      ],
+      "properties": {
+        "deviceId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "registerRequest": {
+      "type": "object",
+      "required": [
+        "identifier",
+        "identifierType",
+        "password"
+      ],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 320
+        },
+        "identifierType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "email"
+            },
+            {
+              "type": "string",
+              "const": "phone"
+            }
+          ]
+        },
+        "password": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 256
+        }
+      },
+      "additionalProperties": false
+    },
+    "registerResponse": {
+      "type": "object",
+      "required": [
+        "userId"
+      ],
+      "properties": {
+        "userId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "registrationModeResponse": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "open"
+            },
+            {
+              "type": "string",
+              "const": "closed"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "setupCompleteRequest": {
+      "type": "object",
+      "required": [
+        "administrator",
+        "idempotencyKey",
+        "setupSecret"
+      ],
+      "properties": {
+        "administrator": {
+          "type": "object",
+          "required": [
+            "identifier",
+            "identifierType",
+            "password"
+          ],
+          "properties": {
+            "identifier": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 320
+            },
+            "identifierType": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "email"
+                },
+                {
+                  "type": "string",
+                  "const": "phone"
+                }
+              ]
+            },
+            "password": {
+              "type": "string",
+              "minLength": 12,
+              "maxLength": 256
+            }
+          },
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128
+        },
+        "connections": {
+          "type": "object",
+          "required": [
+            "mysql",
+            "redis"
+          ],
+          "properties": {
+            "mysql": {
+              "type": "object",
+              "required": [
+                "database",
+                "host",
+                "password",
+                "port",
+                "tls",
+                "username"
+              ],
+              "properties": {
+                "database": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "host": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "password": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "tls": {
+                  "type": "boolean"
+                },
+                "username": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "additionalProperties": false
+            },
+            "redis": {
+              "type": "object",
+              "required": [
+                "database",
+                "host",
+                "port",
+                "tls"
+              ],
+              "properties": {
+                "database": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "host": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "password": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "tls": {
+                  "type": "boolean"
+                },
+                "username": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "setupSecret": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 512
+        }
+      },
+      "additionalProperties": false
+    },
+    "setupStatus": {
+      "type": "object",
+      "required": [
+        "deploymentMode",
+        "installed",
+        "step"
+      ],
+      "properties": {
+        "deploymentMode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "compose"
+            },
+            {
+              "type": "string",
+              "const": "standalone"
+            }
+          ]
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "unconfigured"
+            },
+            {
+              "type": "string",
+              "const": "config_staged"
+            },
+            {
+              "type": "string",
+              "const": "migrating"
+            },
+            {
+              "type": "string",
+              "const": "schema_ready"
+            },
+            {
+              "type": "string",
+              "const": "admin_created"
+            },
+            {
+              "type": "string",
+              "const": "installed"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "testDataServiceRequest": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "service",
+            "setupSecret"
+          ],
+          "properties": {
+            "connection": {
+              "type": "object",
+              "required": [
+                "database",
+                "host",
+                "password",
+                "port",
+                "tls",
+                "username"
+              ],
+              "properties": {
+                "database": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "host": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "password": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "tls": {
+                  "type": "boolean"
+                },
+                "username": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "additionalProperties": false
+            },
+            "service": {
+              "type": "string",
+              "const": "mysql"
+            },
+            "setupSecret": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 512
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "service",
+            "setupSecret"
+          ],
+          "properties": {
+            "connection": {
+              "type": "object",
+              "required": [
+                "database",
+                "host",
+                "port",
+                "tls"
+              ],
+              "properties": {
+                "database": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "host": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "password": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "tls": {
+                  "type": "boolean"
+                },
+                "username": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "additionalProperties": false
+            },
+            "service": {
+              "type": "string",
+              "const": "redis"
+            },
+            "setupSecret": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 512
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "testDataServiceResponse": {
+      "type": "object",
+      "required": [
+        "ok"
+      ],
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "dns"
+            },
+            {
+              "type": "string",
+              "const": "network"
+            },
+            {
+              "type": "string",
+              "const": "tls"
+            },
+            {
+              "type": "string",
+              "const": "authentication"
+            },
+            {
+              "type": "string",
+              "const": "permissions"
+            },
+            {
+              "type": "string",
+              "const": "version"
+            }
+          ]
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "updateRegistrationModeRequest": {
+      "type": "object",
+      "required": [
+        "confirmationToken",
+        "mode"
+      ],
+      "properties": {
+        "confirmationToken": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 128
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "open"
+            },
+            {
+              "type": "string",
+              "const": "closed"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
