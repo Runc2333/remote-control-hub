@@ -1,10 +1,10 @@
 [package]
 name = "agent-core"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 license.workspace = true
 
 [dependencies]
-agent-wire = { version = "0.1.2", path = "../agent-wire" }
+agent-wire = { version = "0.1.3", path = "../agent-wire" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
