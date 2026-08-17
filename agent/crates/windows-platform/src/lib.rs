@@ -297,76 +297,6 @@ pub fn session_user_sid(session_id: u32) -> Result<String, &'static str> {
 }
 
 #[cfg(windows)]
-pub fn read_machine_enrollment_digest() -> Result<Option<String>, &'static str> {
-    use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
-    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
-    use windows::core::w;
-
-    let mut byte_length = 0_u32;
-    let status = unsafe {
-        RegGetValueW(
-            HKEY_LOCAL_MACHINE,
-            w!(r"Software\RemoteControlHub\Agent"),
-            w!("EnrollmentSecretDigest"),
-            RRF_RT_REG_SZ,
-            None,
-            None,
-            Some(&mut byte_length),
-        )
-    };
-    if status == ERROR_FILE_NOT_FOUND {
-        return Ok(None);
-    }
-    if status != ERROR_SUCCESS || byte_length == 0 || byte_length > 1024 {
-        return Err("enrollment_registry_read_failed");
-    }
-    let character_length = (byte_length as usize).div_ceil(2);
-    let mut value = vec![0_u16; character_length];
-    let status = unsafe {
-        RegGetValueW(
-            HKEY_LOCAL_MACHINE,
-            w!(r"Software\RemoteControlHub\Agent"),
-            w!("EnrollmentSecretDigest"),
-            RRF_RT_REG_SZ,
-            None,
-            Some(value.as_mut_ptr().cast()),
-            Some(&mut byte_length),
-        )
-    };
-    if status != ERROR_SUCCESS {
-        return Err("enrollment_registry_read_failed");
-    }
-    let value = String::from_utf16(
-        value
-            .split(|character| *character == 0)
-            .next()
-            .unwrap_or_default(),
-    )
-    .map_err(|_| "enrollment_registry_read_failed")?;
-    Ok(Some(value))
-}
-
-#[cfg(windows)]
-pub fn delete_machine_enrollment_digest() -> Result<(), &'static str> {
-    use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
-    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RegDeleteKeyValueW};
-    use windows::core::w;
-
-    let status = unsafe {
-        RegDeleteKeyValueW(
-            HKEY_LOCAL_MACHINE,
-            w!(r"Software\RemoteControlHub\Agent"),
-            w!("EnrollmentSecretDigest"),
-        )
-    };
-    if status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND {
-        Ok(())
-    } else {
-        Err("enrollment_registry_delete_failed")
-    }
-}
-
-#[cfg(windows)]
 pub fn webview2_runtime_version() -> Result<Option<String>, &'static str> {
     use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 
@@ -394,10 +324,7 @@ pub fn unique_interactive_session_id() -> Result<u32, &'static str> {
 }
 
 #[cfg(windows)]
-pub fn install_msi_with_enrollment_digest(
-    installer_path: &std::path::Path,
-    digest: &str,
-) -> Result<(), &'static str> {
+pub fn install_msi(installer_path: &std::path::Path) -> Result<(), &'static str> {
     use windows::Win32::Foundation::{
         ERROR_SUCCESS, ERROR_SUCCESS_REBOOT_INITIATED, ERROR_SUCCESS_REBOOT_REQUIRED,
     };
@@ -406,17 +333,8 @@ pub fn install_msi_with_enrollment_digest(
     };
     use windows::core::HSTRING;
 
-    if digest.len() != 43
-        || !digest
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-    {
-        return Err("enrollment_digest_invalid");
-    }
     let path = HSTRING::from(installer_path.as_os_str());
-    let properties = HSTRING::from(format!(
-        "RCH_ENROLLMENT_SECRET_DIGEST={digest} REBOOT=ReallySuppress"
-    ));
+    let properties = HSTRING::from("REBOOT=ReallySuppress");
     unsafe {
         MsiSetInternalUI(INSTALLUILEVEL_BASIC, None);
     }
@@ -432,25 +350,6 @@ pub fn install_msi_with_enrollment_digest(
     } else {
         Err("windows_installer_failed")
     }
-}
-
-#[cfg(windows)]
-pub fn show_enrollment_secret(secret: &str) -> Result<(), &'static str> {
-    use windows::Win32::UI::WindowsAndMessaging::{MB_ICONINFORMATION, MB_OK, MessageBoxW};
-    use windows::core::{HSTRING, w};
-
-    let message = HSTRING::from(format!(
-        "安装已完成。\n\n本机安装密钥：\n{secret}\n\n此密钥只显示一次，请立即保存并在设备绑定时输入。"
-    ));
-    unsafe {
-        MessageBoxW(
-            None,
-            &message,
-            w!("Remote Control Hub Agent"),
-            MB_OK | MB_ICONINFORMATION,
-        );
-    }
-    Ok(())
 }
 
 #[cfg(windows)]
@@ -678,21 +577,6 @@ pub fn unprotect_machine_secret(protected: &[u8]) -> Result<Vec<u8>, &'static st
 }
 
 #[cfg(not(windows))]
-pub fn read_machine_enrollment_digest() -> Result<Option<String>, &'static str> {
-    Ok(None)
-}
-
-#[cfg(not(windows))]
-pub fn delete_machine_enrollment_digest() -> Result<(), &'static str> {
-    Ok(())
-}
-
-#[cfg(not(windows))]
-pub fn show_enrollment_secret(_secret: &str) -> Result<(), &'static str> {
-    Err("unsupported_platform")
-}
-
-#[cfg(not(windows))]
 pub fn show_agent_error(_error_code: &str) -> Result<(), &'static str> {
     Err("unsupported_platform")
 }
@@ -708,10 +592,7 @@ pub fn webview2_runtime_version() -> Result<Option<String>, &'static str> {
 }
 
 #[cfg(not(windows))]
-pub fn install_msi_with_enrollment_digest(
-    _installer_path: &std::path::Path,
-    _digest: &str,
-) -> Result<(), &'static str> {
+pub fn install_msi(_installer_path: &std::path::Path) -> Result<(), &'static str> {
     Err("unsupported_platform")
 }
 

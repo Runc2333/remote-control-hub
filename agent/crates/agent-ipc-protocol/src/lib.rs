@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub const IPC_PROTOCOL_VERSION: u16 = 1;
+pub const IPC_PROTOCOL_VERSION: u16 = 2;
 pub const MAX_IPC_MESSAGE_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -27,7 +27,6 @@ pub struct RegistrationRequest {
     pub correlation_id: String,
     pub service_origin: String,
     pub enrollment_token: String,
-    pub local_enrollment_secret: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -162,8 +161,6 @@ impl RegistrationRequest {
             || self.service_origin.len() > 2048
             || self.enrollment_token.is_empty()
             || self.enrollment_token.len() > 128
-            || self.local_enrollment_secret.is_empty()
-            || self.local_enrollment_secret.len() > 256
         {
             return Err("registration_request_invalid");
         }
@@ -188,7 +185,7 @@ mod tests {
     #[test]
     fn rejects_an_unknown_protocol_version() {
         let request = CommandRequest {
-            protocol_version: 2,
+            protocol_version: IPC_PROTOCOL_VERSION + 1,
             correlation_id: "correlation".to_owned(),
             command_id: "command".to_owned(),
             command: IpcCommand::DisplayTurnOff,

@@ -1,6 +1,9 @@
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::io;
+use std::path::PathBuf;
+
+#[cfg(windows)]
+use std::{fs::OpenOptions, io::Write, path::Path};
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -111,6 +114,7 @@ impl IdentityStore {
         Ok(Some(identity))
     }
 
+    #[cfg(windows)]
     pub fn save(&self, identity: &MachineIdentity) -> io::Result<()> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
@@ -119,11 +123,6 @@ impl IdentityStore {
         let bytes = serde_json::to_vec(identity).map_err(io::Error::other)?;
         let mut options = OpenOptions::new();
         options.create(true).truncate(true).write(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
         let mut file = options.open(&temporary_path)?;
         file.write_all(&bytes)?;
         file.sync_all()?;
@@ -139,15 +138,7 @@ impl IdentityStore {
     }
 }
 
-#[cfg(unix)]
-fn sync_parent(path: &Path) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::File::open(parent)?.sync_all()?;
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
+#[cfg(windows)]
 fn sync_parent(_path: &Path) -> io::Result<()> {
     Ok(())
 }

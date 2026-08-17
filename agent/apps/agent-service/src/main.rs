@@ -105,19 +105,6 @@ async fn run_agent(mut shutdown: tokio::sync::watch::Receiver<bool>) -> Result<(
     prepare_machine_storage([&identity_path, &binding_path, &ledger_path])?;
     let identity_store = Arc::new(IdentityStore::new(identity_path));
     let binding_store = Arc::new(LocalBindingStore::new(binding_path));
-    let binding = binding_store
-        .load()
-        .map_err(|_| "binding_load_failed".to_owned())?;
-    if binding.bound_user_sid.is_some() {
-        windows_platform::delete_machine_enrollment_digest().map_err(str::to_owned)?;
-    } else if binding.enrollment_digest.is_none()
-        && let Some(digest) =
-            windows_platform::read_machine_enrollment_digest().map_err(str::to_owned)?
-    {
-        binding_store
-            .initialize_digest(&digest)
-            .map_err(str::to_owned)?;
-    }
     let identity = identity_store
         .load()
         .map_err(|_| "identity_load_failed".to_owned())?;
@@ -185,13 +172,6 @@ fn run_local_command(arguments: &[String]) -> Result<(), String> {
         return Err("administrator_elevation_required".to_owned());
     }
     let operation = match arguments.get(1).map(String::as_str) {
-        Some("configure-enrollment")
-            if arguments.len() == 5
-                && arguments[3] == "--confirm"
-                && arguments[4] == "CONFIGURE_LOCAL_ENROLLMENT" =>
-        {
-            "configure_enrollment"
-        }
         Some("reset-binding")
             if arguments.len() == 4
                 && arguments[2] == "--confirm"
@@ -201,8 +181,7 @@ fn run_local_command(arguments: &[String]) -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: agent-service configure-enrollment <sha256-base64url> --confirm CONFIGURE_LOCAL_ENROLLMENT | reset-binding --confirm RESET_LOCAL_BINDING"
-                    .to_owned(),
+                "usage: agent-service reset-binding --confirm RESET_LOCAL_BINDING".to_owned(),
             );
         }
     };
@@ -211,20 +190,14 @@ fn run_local_command(arguments: &[String]) -> Result<(), String> {
     let audit_path = default_local_audit_path();
     prepare_machine_storage([&identity_path, &binding_path, &audit_path])?;
     append_local_audit(&audit_path, operation, "started", None)?;
-    let result = match operation {
-        "configure_enrollment" => LocalBindingStore::new(binding_path)
-            .initialize_digest(&arguments[2])
-            .map_err(str::to_owned),
-        "reset_binding" => IdentityStore::new(identity_path)
-            .clear()
-            .map_err(|_| "identity_clear_failed".to_owned())
-            .and_then(|()| {
-                LocalBindingStore::new(binding_path)
-                    .clear()
-                    .map_err(|_| "binding_clear_failed".to_owned())
-            }),
-        _ => unreachable!(),
-    };
+    let result = IdentityStore::new(identity_path)
+        .clear()
+        .map_err(|_| "identity_clear_failed".to_owned())
+        .and_then(|()| {
+            LocalBindingStore::new(binding_path)
+                .clear()
+                .map_err(|_| "binding_clear_failed".to_owned())
+        });
     let (result_name, error_code) = match &result {
         Ok(()) => ("succeeded", None),
         Err(error) => ("failed", Some(error.as_str())),

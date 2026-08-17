@@ -12,8 +12,11 @@ use agent_wire::{
 };
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ed25519_dalek::{Signer, SigningKey};
+use ed25519_dalek::Signer;
+#[cfg(windows)]
+use ed25519_dalek::SigningKey;
 use futures_util::{SinkExt, StreamExt};
+#[cfg(windows)]
 use reqwest::redirect::Policy;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -24,9 +27,9 @@ use tokio_tungstenite::connect_async_with_config;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
-use crate::identity::{
-    IdentityStore, MachineIdentity, create_identity, normalize_service_origin, websocket_url,
-};
+#[cfg(windows)]
+use crate::identity::{IdentityStore, create_identity, normalize_service_origin};
+use crate::identity::{MachineIdentity, websocket_url};
 
 const AUTHENTICATION_TIMEOUT: Duration = Duration::from_secs(15);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
@@ -45,12 +48,14 @@ const CAPABILITIES: [CommandType; 8] = [
     CommandType::MediaStop,
 ];
 
+#[cfg(windows)]
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct RegistrationResponse {
     device_id: String,
 }
 
+#[cfg(windows)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RegistrationRequest<'a> {
@@ -76,6 +81,7 @@ pub trait CommandExecutor: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = ExecutionResult> + Send + 'a>>;
 }
 
+#[cfg(windows)]
 pub async fn register(
     store: &IdentityStore,
     service_origin: &str,
@@ -553,6 +559,7 @@ fn reconnect_delay(attempt: u32) -> Duration {
     Duration::from_millis(base.min(MAX_RECONNECT_DELAY_SECONDS) * 1_000 + jitter)
 }
 
+#[cfg(windows)]
 fn computer_name() -> Result<String, String> {
     let value = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))

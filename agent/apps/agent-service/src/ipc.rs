@@ -18,16 +18,15 @@ mod implementation {
     use tokio::sync::{Mutex, mpsc, oneshot, watch};
     use tokio::time::{sleep, timeout};
     use windows_platform::{
-        OwnedPipeSecurityAttributes, delete_machine_enrollment_digest,
-        named_pipe_client_process_id, named_pipe_client_user_sid, session_user_sid,
-        unique_interactive_session_id,
+        OwnedPipeSecurityAttributes, named_pipe_client_process_id, named_pipe_client_user_sid,
+        session_user_sid, unique_interactive_session_id,
     };
 
     use crate::binding::LocalBindingStore;
     use crate::identity::{IdentityStore, MachineIdentity};
     use crate::network::{CommandExecutor, ExecutionResult, register};
 
-    pub const PIPE_NAME: &str = r"\\.\pipe\RemoteControlHub.Agent.v1";
+    pub const PIPE_NAME: &str = r"\\.\pipe\RemoteControlHub.Agent.v2";
     const COMMAND_TIMEOUT: Duration = Duration::from_secs(15);
 
     struct PendingCommand {
@@ -292,9 +291,6 @@ mod implementation {
         context: RegistrationContext<'_>,
     ) -> RegistrationResponse {
         let result = async {
-            context
-                .binding_store
-                .verify_secret(&request.local_enrollment_secret)?;
             let identity = match context
                 .identity_store
                 .load()
@@ -313,7 +309,6 @@ mod implementation {
                 })?,
             };
             context.binding_store.bind(context.actual_user_sid)?;
-            delete_machine_enrollment_digest()?;
             context
                 .identity_sender
                 .send(Some(identity.clone()))

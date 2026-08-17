@@ -61,10 +61,9 @@ async fn register_agent(
     service_client: tauri::State<'_, ServiceClient>,
     service_origin: String,
     enrollment_token: String,
-    local_enrollment_secret: String,
 ) -> Result<String, String> {
     service_client
-        .register(service_origin, enrollment_token, local_enrollment_secret)
+        .register(service_origin, enrollment_token)
         .await
 }
 

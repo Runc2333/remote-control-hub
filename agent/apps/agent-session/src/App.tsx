@@ -104,7 +104,6 @@ const localTime = (seconds?: number): string =>
 function App() {
   const [origin, setOrigin] = useState("");
   const [enrollmentCode, setEnrollmentCode] = useState("");
-  const [localEnrollmentSecret, setLocalEnrollmentSecret] = useState("");
   const [pendingCommand, setPendingCommand] = useState<string>();
   const [registrationPending, setRegistrationPending] = useState(false);
   const [status, setStatus] = useState<AgentStatus>();
@@ -120,7 +119,6 @@ function App() {
   const canSubmit =
     normalizedOrigin !== undefined &&
     enrollmentCode.trim().length >= 8 &&
-    localEnrollmentSecret.length >= 16 &&
     !registrationPending;
 
   const refreshStatus = useCallback(async (): Promise<void> => {
@@ -192,11 +190,9 @@ function App() {
     try {
       await invoke<string>("register_agent", {
         enrollmentToken: enrollmentCode.trim(),
-        localEnrollmentSecret,
         serviceOrigin: normalizedOrigin,
       });
       setEnrollmentCode("");
-      setLocalEnrollmentSecret("");
       await refreshStatus();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -345,23 +341,6 @@ function App() {
                   spellCheck={false}
                   type="url"
                   value={origin}
-                />
-              </label>
-              <label
-                className="block text-sm font-medium"
-                htmlFor="local-enrollment-secret"
-              >
-                本机安装密钥
-                <input
-                  autoComplete="off"
-                  className="input-field font-mono"
-                  id="local-enrollment-secret"
-                  onChange={(event) =>
-                    setLocalEnrollmentSecret(event.currentTarget.value)
-                  }
-                  placeholder="输入安装完成页仅显示一次的密钥"
-                  type="password"
-                  value={localEnrollmentSecret}
                 />
               </label>
               <label

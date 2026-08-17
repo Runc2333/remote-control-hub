@@ -4,8 +4,6 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
 
 fn run() -> Result<(), &'static str> {
@@ -32,13 +30,7 @@ fn run() -> Result<(), &'static str> {
         return Err("installer_path_invalid");
     }
     ensure_webview2(release_directory)?;
-    let mut secret_bytes = [0_u8; 32];
-    getrandom::fill(&mut secret_bytes).map_err(|_| "secret_generation_failed")?;
-    let secret = URL_SAFE_NO_PAD.encode(secret_bytes);
-    secret_bytes.fill(0);
-    let digest = URL_SAFE_NO_PAD.encode(Sha256::digest(secret.as_bytes()));
-    windows_platform::install_msi_with_enrollment_digest(&installer, &digest)?;
-    windows_platform::show_enrollment_secret(&secret)
+    windows_platform::install_msi(&installer)
 }
 
 fn ensure_webview2(release_directory: &std::path::Path) -> Result<(), &'static str> {

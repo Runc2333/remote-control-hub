@@ -9,8 +9,6 @@
   >
     <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 Remote Control Hub Agent。" />
     <MediaTemplate EmbedCab="yes" />
-    <Property Id="RCH_ENROLLMENT_SECRET_DIGEST" Hidden="yes" Secure="yes" />
-    <Launch Condition="RCH_ENROLLMENT_SECRET_DIGEST" Message="安装引导程序未提供 enrollment secret 摘要。" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Remote Control Hub Agent">
@@ -39,18 +37,6 @@
             Wait="yes"
           />
         </Component>
-        <Component Id="EnrollmentSecretComponent" Guid="*">
-          <RegistryValue
-            Root="HKLM"
-            Key="Software\RemoteControlHub\Agent"
-            Name="EnrollmentSecretDigest"
-            Type="string"
-            Value="[RCH_ENROLLMENT_SECRET_DIGEST]"
-            KeyPath="yes"
-          >
-            <PermissionEx Sddl="D:P(A;;KA;;;SY)(A;;KA;;;BA)" />
-          </RegistryValue>
-        </Component>
         <Component
           Id="AgentSessionComponent"
           Guid="E63B6A4A-708F-4B8B-BE47-29C0DF9BB4C4"
@@ -69,7 +55,6 @@
 
     <Feature Id="Complete" Title="Remote Control Hub Agent" Level="1">
       <ComponentRef Id="AgentServiceComponent" />
-      <ComponentRef Id="EnrollmentSecretComponent" />
       <ComponentRef Id="AgentSessionComponent" />
     </Feature>
   </Package>

@@ -44,7 +44,6 @@ impl ServiceClient {
         &self,
         service_origin: String,
         enrollment_token: String,
-        local_enrollment_secret: String,
     ) -> Result<String, String> {
         let correlation_id = self.next_correlation();
         let response = self
@@ -55,7 +54,6 @@ impl ServiceClient {
                     correlation_id,
                     service_origin,
                     enrollment_token,
-                    local_enrollment_secret,
                 }),
             )
             .await?;
@@ -147,7 +145,7 @@ mod platform {
 
     use super::ClientRequest;
 
-    const PIPE_NAME: &str = r"\\.\pipe\RemoteControlHub.Agent.v1";
+    const PIPE_NAME: &str = r"\\.\pipe\RemoteControlHub.Agent.v2";
     const RECONNECT_DELAY: std::time::Duration = std::time::Duration::from_secs(2);
 
     pub async fn run(mut requests: mpsc::Receiver<ClientRequest>) {
@@ -335,9 +333,13 @@ mod platform {
 
     pub async fn run(mut requests: mpsc::Receiver<ClientRequest>) {
         while let Some(request) = requests.recv().await {
-            let _ = request
-                .response
-                .send(Err("unsupported_platform".to_owned()));
+            let ClientRequest {
+                correlation_id,
+                message,
+                response,
+            } = request;
+            drop((correlation_id, message));
+            let _ = response.send(Err("unsupported_platform".to_owned()));
         }
     }
 }
