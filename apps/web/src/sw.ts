@@ -950,25 +950,25 @@ WORKER.addEventListener("message", (event) => {
     "nonce" in data &&
     typeof data.nonce === "string"
   ) {
+    const generation = data.generation;
+    const releaseId = data.releaseId;
+    const nonce = data.nonce;
     event.waitUntil(
-      promoteCandidate(
-        sourceId,
-        data.generation,
-        data.releaseId,
-        data.nonce,
-      ).catch(async (error: unknown) => {
-        const code =
-          error instanceof Error ? error.message : "candidate_startup_failed";
-        await failCandidate(
-          createUpdateFailure(error, {
-            code,
-            phase: "candidate_promotion",
-            releaseId: data.releaseId,
-            userAgent: WORKER.navigator.userAgent,
-            workerVersion: WORKER_VERSION,
-          }),
-        );
-      }),
+      promoteCandidate(sourceId, generation, releaseId, nonce).catch(
+        async (error: unknown) => {
+          const code =
+            error instanceof Error ? error.message : "candidate_startup_failed";
+          await failCandidate(
+            createUpdateFailure(error, {
+              code,
+              phase: "candidate_promotion",
+              releaseId,
+              userAgent: WORKER.navigator.userAgent,
+              workerVersion: WORKER_VERSION,
+            }),
+          );
+        },
+      ),
     );
   }
 });
