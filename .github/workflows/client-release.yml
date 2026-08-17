@@ -73,7 +73,7 @@ jobs:
       - name: Build self-contained unsigned installer
         shell: pwsh
         run: |
-          $releaseDirectory = "artifacts/unsigned"
+          $releaseDirectory = Join-Path $env:RUNNER_TEMP "unsigned-client"
           New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
           $env:RCH_EMBEDDED_MSI_PATH = (Resolve-Path -LiteralPath "artifacts/components/remote-control-hub-agent.msi").Path
           $env:RCH_EMBEDDED_WEBVIEW2_PATH = (Resolve-Path -LiteralPath "artifacts/components/MicrosoftEdgeWebview2Setup.exe").Path
@@ -88,7 +88,7 @@ jobs:
         with:
           if-no-files-found: error
           name: unsigned-client-${{ github.sha }}
-          path: artifacts/unsigned/*.exe
+          path: ${{ runner.temp }}/unsigned-client/*.exe
           retention-days: 30
 
   publish-release:
