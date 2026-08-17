@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "pnpm --filter @remote-control-hub/ui build && tsc -b && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint src vite.config.ts --max-warnings=0",
-    "test": "tsc -b --pretty false && vitest run --exclude=dist/**"
+    "test": "pnpm --filter @remote-control-hub/ui build && tsc -b --pretty false && vitest run --exclude=dist/**"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
