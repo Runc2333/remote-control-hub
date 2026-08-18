@@ -84,7 +84,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet tool restore
-          dotnet tool run wix -- extension add -g WixToolset.Util.wixext/7.0.0
+          dotnet tool run wix -- extension add -acceptEula wix7 -g WixToolset.Util.wixext/7.0.0
           $service = (Resolve-Path -LiteralPath "artifacts/components/agent-service.exe").Path
           $session = (Resolve-Path -LiteralPath "artifacts/components/agent-session.exe").Path
           $icon = (Resolve-Path -LiteralPath "agent/apps/agent-session/src-tauri/icons/icon.ico").Path

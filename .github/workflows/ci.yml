@@ -101,7 +101,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet tool restore
-          dotnet tool run wix -- extension add -g WixToolset.Util.wixext/7.0.0
+          dotnet tool run wix -- extension add -acceptEula wix7 -g WixToolset.Util.wixext/7.0.0
           pnpm version:check
           $version = (Get-Content -LiteralPath "VERSION" -Raw).Trim()
           cargo build --manifest-path agent/Cargo.toml --workspace --exclude agent-session --exclude agent-bootstrapper --locked --release --target x86_64-pc-windows-msvc

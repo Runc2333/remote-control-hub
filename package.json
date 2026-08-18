@@ -1,6 +1,6 @@
 {
   "name": "remote-control-hub",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "scripts": {
     "test": "pnpm -r --if-present test && cargo test --manifest-path agent/Cargo.toml --workspace --locked",
     "prepare": "husky",

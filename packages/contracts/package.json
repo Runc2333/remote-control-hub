@@ -1,6 +1,6 @@
 {
   "name": "@remote-control-hub/contracts",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "main": "dist/index.js",
   "scripts": {
     "test": "vitest run --exclude=dist/**",
