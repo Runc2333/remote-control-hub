@@ -72,7 +72,7 @@ export const ConnectionPanel = ({
   const unregister = async (): Promise<void> => {
     if (
       !window.confirm(
-        "确认解绑此设备？本机保存的设备身份将被清除，远程连接会立即断开。",
+        "确认解绑此设备？控制中心中的设备记录和本机身份都会被删除，远程连接会立即断开。",
       )
     ) {
       return;
@@ -142,9 +142,9 @@ export const ConnectionPanel = ({
           </dl>
           <div className="danger-zone">
             <div>
-              <h3 className="font-medium text-red-900">解除本机绑定</h3>
+              <h3 className="font-medium text-red-900">解绑并删除设备</h3>
               <p className="mt-1 text-sm text-red-700">
-                清除本机设备身份并断开连接，之后可重新绑定其他控制中心。
+                删除控制中心中的设备记录和本机身份，之后可重新绑定其他控制中心。
               </p>
             </div>
             <button

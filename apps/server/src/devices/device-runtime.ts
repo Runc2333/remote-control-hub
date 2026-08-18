@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   AgentConnectionCoordinator,
   type AgentAuthenticationDevice,
@@ -28,6 +28,8 @@ type EnrollmentRow = RowDataPacket & {
 
 type CountRow = RowDataPacket & { count: number };
 
+type DeletableDeviceRow = RowDataPacket & { id: string };
+
 type GenerationRow = RowDataPacket & { generation: number | string };
 
 type DeviceRow = RowDataPacket & {
@@ -42,6 +44,7 @@ type DeviceRow = RowDataPacket & {
 
 type AuthenticationDeviceRow = RowDataPacket & {
   active: number;
+  deleted: number;
   id: string;
   publicKey: Buffer;
 };
@@ -79,6 +82,48 @@ const createDeviceRepository = (config: ServerConfig): DeviceRepository => ({
           mysqlDateTime(new Date()),
         ],
       );
+    } finally {
+      await connection.end();
+    }
+  },
+  deleteDevice: async (deviceId, ownerUserId) => {
+    const connection = await createConnection(connectionOptions(config));
+    try {
+      await connection.beginTransaction();
+      const [devices] =
+        ownerUserId === undefined
+          ? await connection.execute<DeletableDeviceRow[]>(
+              "SELECT id FROM devices WHERE id = ? AND deleted_at IS NULL FOR UPDATE",
+              [deviceId],
+            )
+          : await connection.execute<DeletableDeviceRow[]>(
+              "SELECT id FROM devices WHERE id = ? AND owner_user_id = ? AND deleted_at IS NULL FOR UPDATE",
+              [deviceId, ownerUserId],
+            );
+      if (devices[0] === undefined) {
+        throw new Error("device_not_found");
+      }
+      const now = mysqlDateTime(new Date());
+      await connection.execute<ResultSetHeader>(
+        "INSERT INTO command_results (command_id, status, error_code, received_at, completed_at) SELECT id, 'failed', 'device_deleted', ?, ? FROM commands WHERE device_id = ? AND status IN ('created', 'sent', 'accepted', 'executing')",
+        [now, now, deviceId],
+      );
+      await connection.execute<ResultSetHeader>(
+        "UPDATE commands SET status = 'failed' WHERE device_id = ? AND status IN ('created', 'sent', 'accepted', 'executing')",
+        [deviceId],
+      );
+      await connection.execute<ResultSetHeader>(
+        "DELETE FROM device_group_members WHERE device_id = ?",
+        [deviceId],
+      );
+      await connection.execute<ResultSetHeader>(
+        "UPDATE devices SET public_key = ?, computer_name = 'deleted device', service_version = 'deleted', session_version = 'deleted', capabilities = JSON_ARRAY(), disabled_at = COALESCE(disabled_at, ?), credential_revoked_at = COALESCE(credential_revoked_at, ?), last_seen_at = NULL, deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+        [randomBytes(32), now, now, now, deviceId],
+      );
+      await connection.commit();
+    } catch (error: unknown) {
+      await connection.rollback();
+      throw error;
     } finally {
       await connection.end();
     }
@@ -182,13 +227,18 @@ const createAgentConnectionRepository = (
     const connection = await createConnection(connectionOptions(config));
     try {
       const [rows] = await connection.execute<AuthenticationDeviceRow[]>(
-        "SELECT id, public_key AS publicKey, (disabled_at IS NULL AND credential_revoked_at IS NULL AND deleted_at IS NULL) AS active FROM devices WHERE id = ? LIMIT 1",
+        "SELECT id, public_key AS publicKey, (disabled_at IS NULL AND credential_revoked_at IS NULL AND deleted_at IS NULL) AS active, (deleted_at IS NOT NULL) AS deleted FROM devices WHERE id = ? LIMIT 1",
         [deviceId],
       );
       const row = rows[0];
       return row === undefined
         ? undefined
-        : { active: row.active === 1, id: row.id, publicKey: row.publicKey };
+        : {
+            active: row.active === 1,
+            deleted: row.deleted === 1,
+            id: row.id,
+            publicKey: row.publicKey,
+          };
     } finally {
       await connection.end();
     }

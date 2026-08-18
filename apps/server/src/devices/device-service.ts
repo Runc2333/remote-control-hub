@@ -21,6 +21,10 @@ export type DeviceRepository = {
     tokenHash: Buffer,
     expiresAt: string,
   ) => Promise<void>;
+  deleteDevice: (
+    deviceId: string,
+    ownerUserId: string | undefined,
+  ) => Promise<void>;
   listDevices: (ownerUserId: string) => Promise<StoredDevice[]>;
   registerDevice: (
     tokenHash: Buffer,
@@ -179,6 +183,19 @@ export class DeviceService {
       serviceVersion: device.serviceVersion,
       sessionVersion: device.sessionVersion,
     }));
+  }
+
+  public async deleteDevice(
+    ownerUserId: string,
+    deviceId: string,
+  ): Promise<void> {
+    await this.#repository.deleteDevice(deviceId, ownerUserId);
+    this.#connections.forceDisconnect(deviceId, "device_deleted");
+  }
+
+  public async unregisterDevice(deviceId: string): Promise<void> {
+    await this.#repository.deleteDevice(deviceId, undefined);
+    this.#connections.forceDisconnect(deviceId, "device_deleted");
   }
 
   public registerDevice(request: RegisterAgentRequest): Promise<string> {

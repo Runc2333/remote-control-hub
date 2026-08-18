@@ -42,14 +42,37 @@ export const deviceDetailLoader = async ({
   return device;
 };
 
-export const commandsLoader = async (): Promise<
-  CommandBatchListResponse & DeviceListResponse
-> => {
-  const [commands, devices] = await Promise.all([
-    API_CLIENT.getCommandBatches(),
-    API_CLIENT.getDevices(),
-  ]);
-  return { batches: commands.batches, devices: devices.devices };
+export type CommandsLoaderData = CommandBatchListResponse &
+  DeviceListResponse & {
+    historyAvailable: boolean;
+  };
+
+export const commandsLoader = async (): Promise<CommandsLoaderData> => {
+  const devicesPromise = API_CLIENT.getDevices();
+  try {
+    const [commands, devices] = await Promise.all([
+      API_CLIENT.getCommandBatches(),
+      devicesPromise,
+    ]);
+    return {
+      batches: commands.batches,
+      devices: devices.devices,
+      historyAvailable: true,
+    };
+  } catch (error: unknown) {
+    if (
+      error instanceof ApiError &&
+      (error.status === 404 || error.status === 503)
+    ) {
+      const devices = await devicesPromise;
+      return {
+        batches: [],
+        devices: devices.devices,
+        historyAvailable: false,
+      };
+    }
+    throw error;
+  }
 };
 
 export const sessionsLoader = (): Promise<SessionListResponse> =>

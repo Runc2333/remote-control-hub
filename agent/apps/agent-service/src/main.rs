@@ -121,7 +121,7 @@ async fn run_agent(mut shutdown: tokio::sync::watch::Receiver<bool>) -> Result<(
         Arc::clone(&identity_store),
         Arc::clone(&binding_store),
         Arc::clone(&router),
-        identity_sender,
+        identity_sender.clone(),
         Arc::clone(&connected),
         shutdown.clone(),
     ));
@@ -131,6 +131,11 @@ async fn run_agent(mut shutdown: tokio::sync::watch::Receiver<bool>) -> Result<(
         network_shutdown_sender = Some(sender);
         tokio::spawn(network::run_reconnecting(
             identity,
+            network::LocalIdentityContext {
+                binding_store: Arc::clone(&binding_store),
+                identity_sender: identity_sender.clone(),
+                identity_store: Arc::clone(&identity_store),
+            },
             Arc::clone(&ledger),
             Arc::clone(&router) as Arc<dyn network::CommandExecutor>,
             Arc::clone(&connected),
@@ -160,6 +165,11 @@ async fn run_agent(mut shutdown: tokio::sync::watch::Receiver<bool>) -> Result<(
                     network_shutdown_sender = Some(sender);
                     network_task = Some(tokio::spawn(network::run_reconnecting(
                         identity,
+                        network::LocalIdentityContext {
+                            binding_store: Arc::clone(&binding_store),
+                            identity_sender: identity_sender.clone(),
+                            identity_store: Arc::clone(&identity_store),
+                        },
                         Arc::clone(&ledger),
                         Arc::clone(&router) as Arc<dyn network::CommandExecutor>,
                         Arc::clone(&connected),

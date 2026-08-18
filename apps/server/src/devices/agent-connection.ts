@@ -15,6 +15,7 @@ const MAX_PENDING_CHALLENGES = 1_000;
 
 export type AgentAuthenticationDevice = {
   active: boolean;
+  deleted: boolean;
   id: string;
   publicKey: Buffer;
 };
@@ -62,6 +63,47 @@ export class AgentConnectionCoordinator {
   }
 
   public async begin(hello: AgentHello): Promise<AgentChallenge> {
+    return this.#begin(hello, false);
+  }
+
+  public async beginUnregistration(hello: AgentHello): Promise<AgentChallenge> {
+    return this.#begin(hello, true);
+  }
+
+  public authenticateUnregistration(message: AgentAuthenticate): string {
+    return this.#verify(message).hello.deviceId;
+  }
+
+  public async authenticate(
+    message: AgentAuthenticate,
+    remoteAddress: string,
+  ): Promise<AuthenticatedAgentConnection> {
+    const pending = this.#verify(message);
+    const generation = await this.#repository.recordAuthenticated(
+      pending.hello,
+      remoteAddress.slice(0, 64),
+      message.sessionId,
+    );
+    try {
+      this.#connections.connect(message.deviceId, generation);
+    } catch (error: unknown) {
+      await this.#repository
+        .recordDisconnected(message.sessionId, "connection_rejected")
+        .catch(() => undefined);
+      throw error;
+    }
+    return {
+      deviceId: message.deviceId,
+      generation,
+      lastMessageSequence: message.messageSequence,
+      sessionId: message.sessionId,
+    };
+  }
+
+  async #begin(
+    hello: AgentHello,
+    unregistration: boolean,
+  ): Promise<AgentChallenge> {
     this.#deleteExpired();
     if (
       hello.protocolVersion !== AGENT_PROTOCOL_VERSION ||
@@ -75,11 +117,10 @@ export class AgentConnectionCoordinator {
     const device = await this.#repository.findAuthenticationDevice(
       hello.deviceId,
     );
-    if (
-      device === undefined ||
-      !device.active ||
-      device.publicKey.length !== 32
-    ) {
+    if (device === undefined || device.deleted) {
+      throw new Error("device_not_found");
+    }
+    if ((!unregistration && !device.active) || device.publicKey.length !== 32) {
       throw new Error("device_authentication_failed");
     }
     const challenge: AgentChallenge = {
@@ -101,10 +142,7 @@ export class AgentConnectionCoordinator {
     return challenge;
   }
 
-  public async authenticate(
-    message: AgentAuthenticate,
-    remoteAddress: string,
-  ): Promise<AuthenticatedAgentConnection> {
+  #verify(message: AgentAuthenticate): PendingChallenge {
     const pending = this.#pending.get(message.sessionId);
     this.#pending.delete(message.sessionId);
     if (
@@ -139,25 +177,7 @@ export class AgentConnectionCoordinator {
     ) {
       throw new Error("device_authentication_failed");
     }
-    const generation = await this.#repository.recordAuthenticated(
-      pending.hello,
-      remoteAddress.slice(0, 64),
-      message.sessionId,
-    );
-    try {
-      this.#connections.connect(message.deviceId, generation);
-    } catch (error: unknown) {
-      await this.#repository
-        .recordDisconnected(message.sessionId, "connection_rejected")
-        .catch(() => undefined);
-      throw error;
-    }
-    return {
-      deviceId: message.deviceId,
-      generation,
-      lastMessageSequence: message.messageSequence,
-      sessionId: message.sessionId,
-    };
+    return pending;
   }
 
   public async heartbeat(

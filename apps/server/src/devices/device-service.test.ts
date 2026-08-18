@@ -26,6 +26,21 @@ class MemoryDeviceRepository implements DeviceRepository {
     return this.devices.filter((device) => device.ownerUserId === ownerUserId);
   }
 
+  public async deleteDevice(
+    deviceId: string,
+    ownerUserId: string | undefined,
+  ): Promise<void> {
+    const index = this.devices.findIndex(
+      (device) =>
+        device.id === deviceId &&
+        (ownerUserId === undefined || device.ownerUserId === ownerUserId),
+    );
+    if (index === -1) {
+      throw new Error("device_not_found");
+    }
+    this.devices.splice(index, 1);
+  }
+
   public async registerDevice(
     tokenHash: Buffer,
     request: Omit<RegisterAgentRequest, "enrollmentToken">,
@@ -112,6 +127,32 @@ describe("device service", () => {
     connections.disconnect(device.id, second);
     expect((await service.listDevices("owner-1"))[0]?.online).toBe(false);
     expect(await service.listDevices("another-owner")).toEqual([]);
+  });
+
+  it("deletes an owned device and forcibly disconnects it", async () => {
+    const repository = new MemoryDeviceRepository();
+    repository.devices.push({
+      capabilities: REGISTRATION.capabilities,
+      computerName: REGISTRATION.computerName,
+      id: "11111111-1111-4111-8111-111111111111",
+      ownerUserId: "owner-1",
+      serviceVersion: REGISTRATION.serviceVersion,
+      sessionVersion: REGISTRATION.sessionVersion,
+    });
+    const connections = new DeviceConnectionRegistry();
+    const close = vi.fn();
+    const device = repository.devices[0];
+    if (device === undefined) {
+      throw new Error("device_missing");
+    }
+    const generation = connections.connect(device.id);
+    connections.attachSender(device.id, generation, vi.fn(), close);
+    const service = new DeviceService(repository, connections);
+
+    await service.deleteDevice("owner-1", device.id);
+
+    expect(repository.devices).toEqual([]);
+    expect(close).toHaveBeenCalledWith("device_deleted");
   });
 
   it("publishes status changes only for the effective generation", () => {

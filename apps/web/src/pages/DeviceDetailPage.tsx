@@ -1,3 +1,4 @@
+import { faUnlink } from "@fortawesome/free-solid-svg-icons";
 import type { Device } from "@remote-control-hub/contracts";
 import { Icon } from "@remote-control-hub/ui";
 import { useState } from "react";
@@ -32,6 +33,26 @@ export function DeviceDetailPage() {
       await navigate(`/commands?batch=${encodeURIComponent(batch.batchId)}`);
     } catch {
       setMessage("命令未能提交，请稍后重试。");
+    } finally {
+      setPending(undefined);
+    }
+  };
+
+  const unregister = async (): Promise<void> => {
+    if (
+      !window.confirm(
+        `确认解绑 ${device.computerName}？服务端设备记录将被删除，Agent 会清除本机身份并断开连接。`,
+      )
+    ) {
+      return;
+    }
+    setPending("unregister");
+    setMessage(undefined);
+    try {
+      await API_CLIENT.deleteDevice(device.id);
+      await navigate("/devices", { replace: true });
+    } catch {
+      setMessage("设备解绑失败，请稍后重试。");
     } finally {
       setPending(undefined);
     }
@@ -94,6 +115,24 @@ export function DeviceDetailPage() {
             {message}
           </p>
         )}
+      </section>
+      <section className="surface-card mt-4 border-red-200 p-4 dark:border-red-900">
+        <h2 className="font-semibold text-red-900 dark:text-red-200">
+          解绑设备
+        </h2>
+        <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+          删除控制中心中的设备记录，并让 Agent
+          清除本机身份。此操作会立即断开远程连接。
+        </p>
+        <button
+          className="button-danger mt-4"
+          disabled={pending !== undefined}
+          onClick={() => void unregister()}
+          type="button"
+        >
+          <Icon icon={faUnlink} />
+          {pending === "unregister" ? "正在解绑…" : "解绑并删除设备"}
+        </button>
       </section>
     </>
   );

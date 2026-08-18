@@ -163,4 +163,26 @@ describe("ApiClient", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("deletes one owned device", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ csrfToken: "csrf-token" }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), { status: 200 }),
+      );
+    const client = new ApiClient({ baseUrl: "https://hub.example.com", fetch });
+
+    await client.deleteDevice("11111111-1111-4111-8111-111111111111");
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "https://hub.example.com/api/v1/devices/11111111-1111-4111-8111-111111111111",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
 });

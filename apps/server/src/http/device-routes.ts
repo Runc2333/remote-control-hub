@@ -5,6 +5,7 @@ import {
   ADMIN_SYSTEM_SUMMARY_RESPONSE_SCHEMA,
   ADMIN_UPDATE_DEVICE_REQUEST_SCHEMA,
   AGENT_AUTHENTICATE_SCHEMA,
+  AGENT_CHALLENGE_SCHEMA,
   AGENT_COMMAND_RESULT_SCHEMA,
   AGENT_HELLO_SCHEMA,
   AGENT_HEARTBEAT_SCHEMA,
@@ -726,6 +727,69 @@ export const deviceRoutes: FastifyPluginAsync<DeviceRoutesOptions> = async (
     },
   );
 
+  fastify.delete<{ Params: AdminDeviceIdParams }>(
+    "/api/v1/devices/:deviceId",
+    {
+      onRequest: [
+        requireInstalled,
+        requireBrowserConfiguration,
+        requireOrigin,
+        fastify.csrfProtection,
+      ],
+      preHandler: fastify.rateLimit({ max: 10, timeWindow: "10 minutes" }),
+      schema: {
+        params: ADMIN_DEVICE_ID_PARAMS_SCHEMA,
+        querystring: EMPTY_OBJECT_SCHEMA,
+        response: {
+          200: AUTH_ACTION_RESPONSE_SCHEMA,
+          401: ERROR_RESPONSE_SCHEMA,
+          403: ERROR_RESPONSE_SCHEMA,
+          404: ERROR_RESPONSE_SCHEMA,
+          503: ERROR_RESPONSE_SCHEMA,
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireSession(request, reply);
+      if (session === undefined) {
+        return;
+      }
+      try {
+        await options
+          .getDeviceRuntime()
+          .service.deleteDevice(session.userId, request.params.deviceId);
+        audit(
+          {
+            action: "device.unregister",
+            actorId: session.userId,
+            actorType: "user",
+            ownerUserId: session.userId,
+            requestId: request.id,
+            result: "success",
+            subjectId: request.params.deviceId,
+            subjectType: "device",
+            visibility: "owner",
+          },
+          request,
+        );
+        return { success: true as const };
+      } catch (error: unknown) {
+        const code =
+          error instanceof Error ? error.message : "device_unregister_failed";
+        const status = code === "device_not_found" ? 404 : 503;
+        return reply
+          .code(status)
+          .send(
+            errorResponse(
+              request,
+              code,
+              status === 404 ? "设备不存在" : "设备解绑失败",
+            ),
+          );
+      }
+    },
+  );
+
   fastify.get(
     "/api/v1/events",
     {
@@ -873,6 +937,121 @@ export const deviceRoutes: FastifyPluginAsync<DeviceRoutesOptions> = async (
               request,
               "device_registration_unavailable",
               "设备注册暂不可用",
+            ),
+          );
+      }
+    },
+  );
+
+  fastify.post<{ Body: AgentHello }>(
+    "/api/v1/agent/registration/challenge",
+    {
+      onRequest: [requireInstalled, requireDeviceConfiguration],
+      preHandler: fastify.rateLimit({ max: 10, timeWindow: "1 minute" }),
+      schema: {
+        body: AGENT_HELLO_SCHEMA,
+        params: EMPTY_OBJECT_SCHEMA,
+        querystring: EMPTY_OBJECT_SCHEMA,
+        response: {
+          200: AGENT_CHALLENGE_SCHEMA,
+          400: ERROR_RESPONSE_SCHEMA,
+          403: ERROR_RESPONSE_SCHEMA,
+          404: ERROR_RESPONSE_SCHEMA,
+          503: ERROR_RESPONSE_SCHEMA,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return await options
+          .getDeviceRuntime()
+          .agentConnections.beginUnregistration(request.body);
+      } catch (error: unknown) {
+        const code =
+          error instanceof Error
+            ? error.message
+            : "device_unregistration_unavailable";
+        const status =
+          code === "device_not_found"
+            ? 404
+            : code === "device_authentication_failed"
+              ? 403
+              : code === "agent_hello_invalid"
+                ? 400
+                : 503;
+        return reply
+          .code(status)
+          .send(
+            errorResponse(
+              request,
+              code,
+              status === 404
+                ? "设备不存在"
+                : status === 403
+                  ? "设备身份验证失败"
+                  : status === 400
+                    ? "设备请求无效"
+                    : "设备解绑暂不可用",
+            ),
+          );
+      }
+    },
+  );
+
+  fastify.delete<{ Body: AgentAuthenticate }>(
+    "/api/v1/agent/registration",
+    {
+      onRequest: [requireInstalled, requireDeviceConfiguration],
+      preHandler: fastify.rateLimit({ max: 10, timeWindow: "1 minute" }),
+      schema: {
+        body: AGENT_AUTHENTICATE_SCHEMA,
+        params: EMPTY_OBJECT_SCHEMA,
+        querystring: EMPTY_OBJECT_SCHEMA,
+        response: {
+          200: AUTH_ACTION_RESPONSE_SCHEMA,
+          403: ERROR_RESPONSE_SCHEMA,
+          404: ERROR_RESPONSE_SCHEMA,
+          503: ERROR_RESPONSE_SCHEMA,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const runtime = options.getDeviceRuntime();
+        const deviceId = runtime.agentConnections.authenticateUnregistration(
+          request.body,
+        );
+        await runtime.service.unregisterDevice(deviceId);
+        audit(
+          {
+            action: "device.unregister",
+            actorId: deviceId,
+            actorType: "agent",
+            requestId: request.id,
+            result: "success",
+            subjectId: deviceId,
+            subjectType: "device",
+            visibility: "system",
+          },
+          request,
+        );
+        return { success: true as const };
+      } catch (error: unknown) {
+        const code =
+          error instanceof Error
+            ? error.message
+            : "device_unregistration_unavailable";
+        if (code === "device_not_found") {
+          return { success: true as const };
+        }
+        const status = code === "device_authentication_failed" ? 403 : 503;
+        return reply
+          .code(status)
+          .send(
+            errorResponse(
+              request,
+              code,
+              status === 403 ? "设备身份验证失败" : "设备解绑暂不可用",
             ),
           );
       }
@@ -1028,11 +1207,15 @@ export const deviceRoutes: FastifyPluginAsync<DeviceRoutesOptions> = async (
               { error, requestId: request.id },
               "agent_connection_message_rejected",
             );
+            const deviceDeleted =
+              error instanceof Error && error.message === "device_not_found";
             socket.close(
-              4003,
-              process.env.NODE_ENV === "test" && error instanceof Error
-                ? error.message.slice(0, 123)
-                : "authentication_failed",
+              deviceDeleted ? 4004 : 4003,
+              deviceDeleted
+                ? "device_deleted"
+                : process.env.NODE_ENV === "test" && error instanceof Error
+                  ? error.message.slice(0, 123)
+                  : "authentication_failed",
             );
           });
       });

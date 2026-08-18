@@ -22,7 +22,7 @@ const HELLO: AgentHello = {
   type: "agent.hello",
 };
 
-const createFixture = () => {
+const createFixture = (active = true) => {
   const keys = generateKeyPairSync("ed25519");
   const publicDer = keys.publicKey.export({ format: "der", type: "spki" });
   const publicKey = Buffer.from(publicDer).subarray(-32);
@@ -36,7 +36,7 @@ const createFixture = () => {
   const repository: AgentConnectionRepository = {
     findAuthenticationDevice: async (deviceId) =>
       deviceId === DEVICE_ID
-        ? { active: true, id: deviceId, publicKey }
+        ? { active, deleted: false, id: deviceId, publicKey }
         : undefined,
     recordAuthenticated,
     recordDisconnected,
@@ -116,6 +116,32 @@ describe("agent connection coordinator", () => {
       fixture.coordinator.authenticate(message, "127.0.0.1"),
     ).rejects.toThrow("device_authentication_failed");
     expect(fixture.connections.isOnline(DEVICE_ID)).toBe(false);
+  });
+
+  it("authenticates unregistration for an inactive device", async () => {
+    const fixture = createFixture(false);
+    const challenge = await fixture.coordinator.beginUnregistration(HELLO);
+    const message: AgentAuthenticate = {
+      deviceId: challenge.deviceId,
+      expiresAt: challenge.expiresAt,
+      messageSequence: 1,
+      nonce: challenge.nonce,
+      protocolVersion: 1,
+      sessionId: challenge.sessionId,
+      signature: sign(
+        null,
+        Buffer.from(buildAgentAuthenticationPayload(challenge), "utf8"),
+        fixture.privateKey,
+      ).toString("base64url"),
+      type: "agent.authenticate",
+    };
+
+    expect(fixture.coordinator.authenticateUnregistration(message)).toBe(
+      DEVICE_ID,
+    );
+    await expect(fixture.coordinator.begin(HELLO)).rejects.toThrow(
+      "device_authentication_failed",
+    );
   });
 
   it("does not let a stale generation disconnect the replacement", async () => {

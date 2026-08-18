@@ -27,9 +27,10 @@ use tokio_tungstenite::connect_async_with_config;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
+use crate::binding::LocalBindingStore;
+use crate::identity::{IdentityStore, MachineIdentity, websocket_url};
 #[cfg(windows)]
-use crate::identity::{IdentityStore, create_identity, normalize_service_origin};
-use crate::identity::{MachineIdentity, websocket_url};
+use crate::identity::{create_identity, normalize_service_origin};
 
 const AUTHENTICATION_TIMEOUT: Duration = Duration::from_secs(15);
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
@@ -79,6 +80,12 @@ pub trait CommandExecutor: Send + Sync {
         &'a self,
         command: &'a AgentCommand,
     ) -> Pin<Box<dyn Future<Output = ExecutionResult> + Send + 'a>>;
+}
+
+pub struct LocalIdentityContext {
+    pub binding_store: Arc<LocalBindingStore>,
+    pub identity_sender: watch::Sender<Option<MachineIdentity>>,
+    pub identity_store: Arc<IdentityStore>,
 }
 
 #[cfg(windows)]
@@ -136,8 +143,88 @@ pub async fn register(
     Ok(identity)
 }
 
+#[cfg(windows)]
+pub async fn unregister(identity: &MachineIdentity) -> Result<(), String> {
+    let signing_key = identity.signing_key().map_err(str::to_owned)?;
+    let client = reqwest::Client::builder()
+        .redirect(Policy::none())
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|_| "unregistration_client_failed".to_owned())?;
+    let challenge_response = client
+        .post(format!(
+            "{}/api/v1/agent/registration/challenge",
+            identity.service_origin
+        ))
+        .json(&AgentHello {
+            protocol_version: AGENT_PROTOCOL_VERSION,
+            message_sequence: 0,
+            capabilities: CAPABILITIES.to_vec(),
+            device_id: identity.device_id.clone(),
+            service_version: SERVICE_VERSION.to_owned(),
+            session_version: SESSION_VERSION.to_owned(),
+            message_type: "agent.hello".to_owned(),
+        })
+        .send()
+        .await
+        .map_err(|_| "device_unregistration_unavailable".to_owned())?;
+    if challenge_response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(());
+    }
+    if !challenge_response.status().is_success() {
+        return Err(
+            if challenge_response.status() == reqwest::StatusCode::FORBIDDEN {
+                "device_authentication_failed".to_owned()
+            } else {
+                "device_unregistration_unavailable".to_owned()
+            },
+        );
+    }
+    let challenge: AgentChallenge = challenge_response
+        .json()
+        .await
+        .map_err(|_| "unregistration_challenge_invalid".to_owned())?;
+    validate_challenge(&challenge, &identity.device_id)?;
+    let signature = signing_key.sign(
+        build_authentication_payload(
+            &challenge.session_id,
+            &challenge.device_id,
+            &challenge.nonce,
+            &challenge.expires_at,
+        )
+        .as_bytes(),
+    );
+    let response = client
+        .delete(format!(
+            "{}/api/v1/agent/registration",
+            identity.service_origin
+        ))
+        .json(&AgentAuthenticate {
+            protocol_version: AGENT_PROTOCOL_VERSION,
+            message_sequence: 1,
+            device_id: challenge.device_id,
+            expires_at: challenge.expires_at,
+            nonce: challenge.nonce,
+            session_id: challenge.session_id,
+            signature: URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+            message_type: "agent.authenticate".to_owned(),
+        })
+        .send()
+        .await
+        .map_err(|_| "device_unregistration_unavailable".to_owned())?;
+    if response.status().is_success() || response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(());
+    }
+    Err(if response.status() == reqwest::StatusCode::FORBIDDEN {
+        "device_authentication_failed".to_owned()
+    } else {
+        "device_unregistration_unavailable".to_owned()
+    })
+}
+
 pub async fn run_reconnecting(
     identity: MachineIdentity,
+    local_identity: LocalIdentityContext,
     ledger: Arc<Mutex<FileCommandLedger>>,
     executor: Arc<dyn CommandExecutor>,
     connected: Arc<AtomicBool>,
@@ -161,6 +248,30 @@ pub async fn run_reconnecting(
             return;
         }
         if let Err(error) = result {
+            if error == "device_deleted" {
+                let cleared = local_identity
+                    .identity_store
+                    .clear()
+                    .map_err(|_| "identity_clear_failed")
+                    .and_then(|()| {
+                        local_identity
+                            .binding_store
+                            .clear()
+                            .map_err(|_| "binding_clear_failed")
+                    });
+                match cleared {
+                    Ok(()) => {
+                        let _ = local_identity.identity_sender.send(None);
+                        return;
+                    }
+                    Err(clear_error) => {
+                        eprintln!(
+                            "{{\"level\":\"error\",\"event\":\"agent_remote_unregistration_failed\",\"reason\":\"{}\"}}",
+                            clear_error
+                        );
+                    }
+                }
+            }
             eprintln!(
                 "{{\"level\":\"warn\",\"event\":\"agent_connection_closed\",\"reason\":\"{}\"}}",
                 sanitize_log_value(&error)
@@ -467,6 +578,9 @@ fn message_text(
 ) -> Result<String, String> {
     match message {
         Some(Ok(Message::Text(text))) if text.len() <= MAX_FRAME_BYTES => Ok(text.to_string()),
+        Some(Ok(Message::Close(Some(frame)))) if frame.reason == "device_deleted" => {
+            Err("device_deleted".to_owned())
+        }
         Some(Ok(Message::Close(_))) | None => Err("websocket_closed".to_owned()),
         Some(Ok(_)) => Err("agent_message_invalid".to_owned()),
         Some(Err(_)) => Err("websocket_receive_failed".to_owned()),

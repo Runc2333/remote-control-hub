@@ -24,6 +24,7 @@ const createFixture = (online: boolean) => {
   }
   const repository: DeviceRepository = {
     createEnrollmentToken: vi.fn(async () => undefined),
+    deleteDevice: vi.fn(async () => undefined),
     listDevices: vi.fn(async (ownerUserId) =>
       ownerUserId === OWNER_ID
         ? [

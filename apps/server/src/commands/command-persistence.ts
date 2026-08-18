@@ -257,7 +257,7 @@ export class MySqlCommandPersistence implements CommandPersistence {
   ): Promise<CoordinatedBatch[]> {
     const connection = await createConnection(connectionOptions(this.#config));
     try {
-      const [rows] = await connection.execute<ListedCommandRow[]>(
+      const [rows] = await connection.query<ListedCommandRow[]>(
         "SELECT cb.id AS batchId, cb.owner_user_id AS ownerUserId, cb.initiated_by_user_id AS initiatedByUserId, cb.command_type AS commandType, cb.request_digest AS requestDigest, cb.created_at AS createdAt, c.id AS commandId, c.device_id AS deviceId, c.device_sequence AS deviceSequence, c.status, c.expires_at AS expiresAt, (SELECT cr.error_code FROM command_results cr WHERE cr.command_id = c.id ORDER BY cr.id DESC LIMIT 1) AS errorCode FROM (SELECT id, owner_user_id, initiated_by_user_id, command_type, request_digest, created_at FROM command_batches WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT ?) cb INNER JOIN commands c ON c.batch_id = cb.id ORDER BY cb.created_at DESC, c.device_sequence",
         [ownerUserId, limit],
       );

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AGENT_HELLO_SCHEMA,
   buildAgentAuthenticationPayload,
+  type AgentAuthenticate,
   type AgentChallenge,
   type AgentHello,
 } from "@remote-control-hub/contracts";
@@ -87,6 +88,7 @@ const createRuntime = () => {
   const agentRepository: AgentConnectionRepository = {
     findAuthenticationDevice: async () => ({
       active: true,
+      deleted: false,
       id: DEVICE_ID,
       publicKey: Buffer.from(publicDer).subarray(-32),
     }),
@@ -96,6 +98,7 @@ const createRuntime = () => {
   };
   const deviceRepository: DeviceRepository = {
     createEnrollmentToken: vi.fn(async () => undefined),
+    deleteDevice: vi.fn(async () => undefined),
     listDevices: vi.fn(async (ownerUserId) =>
       ownerUserId === OWNER_ID
         ? [
@@ -131,6 +134,7 @@ const createRuntime = () => {
   const commands = new CommandRuntime(runtime);
   return {
     commands,
+    deleteDevice: deviceRepository.deleteDevice,
     privateKey: keys.privateKey,
     recordAuthenticated,
     recordHeartbeat,
@@ -152,6 +156,57 @@ const nextMessage = (socket: InjectedSocket): Promise<string> =>
   });
 
 describe("device routes", () => {
+  it("authenticates an agent and deletes its server device record", async () => {
+    const fixture = createRuntime();
+    const app = buildApp(await createConfig(), {
+      createAuditService: () => ({ record: vi.fn(async () => undefined) }),
+      createCommandRuntime: () => fixture.commands,
+      createDeviceRuntime: () => fixture.runtime,
+    });
+    apps.push(app);
+    await app.ready();
+    const hello: AgentHello = {
+      capabilities: ["display.turn_off"],
+      deviceId: DEVICE_ID,
+      messageSequence: 0,
+      protocolVersion: 1,
+      serviceVersion: "0.1.0",
+      sessionVersion: "0.1.0",
+      type: "agent.hello",
+    };
+    const challengeResponse = await app.inject({
+      method: "POST",
+      payload: hello,
+      url: "/api/v1/agent/registration/challenge",
+    });
+    expect(challengeResponse.statusCode).toBe(200);
+    const challenge = challengeResponse.json<AgentChallenge>();
+    const authentication: AgentAuthenticate = {
+      deviceId: challenge.deviceId,
+      expiresAt: challenge.expiresAt,
+      messageSequence: 1,
+      nonce: challenge.nonce,
+      protocolVersion: 1,
+      sessionId: challenge.sessionId,
+      signature: sign(
+        null,
+        Buffer.from(buildAgentAuthenticationPayload(challenge), "utf8"),
+        fixture.privateKey,
+      ).toString("base64url"),
+      type: "agent.authenticate",
+    };
+
+    const response = await app.inject({
+      method: "DELETE",
+      payload: authentication,
+      url: "/api/v1/agent/registration",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    expect(fixture.deleteDevice).toHaveBeenCalledWith(DEVICE_ID, undefined);
+  });
+
   it("completes the websocket challenge and returns a connection generation", async () => {
     const fixture = createRuntime();
     const app = buildApp(await createConfig(), {

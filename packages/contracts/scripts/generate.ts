@@ -95,6 +95,14 @@ await writeJson("api/openapi/openapi.json", {
     "/api/v1/agent/register": {
       post: { responses: { 200: { description: "Registered agent" } } },
     },
+    "/api/v1/agent/registration": {
+      delete: { responses: { 200: { description: "Unregistered agent" } } },
+    },
+    "/api/v1/agent/registration/challenge": {
+      post: {
+        responses: { 200: { description: "Agent unregistration challenge" } },
+      },
+    },
     "/api/v1/auth/csrf": {
       get: { responses: { 200: { description: "CSRF token" } } },
     },
@@ -109,6 +117,9 @@ await writeJson("api/openapi/openapi.json", {
     },
     "/api/v1/devices": {
       get: { responses: { 200: { description: "Owned devices" } } },
+    },
+    "/api/v1/devices/{deviceId}": {
+      delete: { responses: { 200: { description: "Unregistered device" } } },
     },
     "/api/v1/enrollment-tokens": {
       post: { responses: { 200: { description: "Created enrollment token" } } },

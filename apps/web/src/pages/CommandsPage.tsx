@@ -1,16 +1,11 @@
-import type {
-  CommandBatchListResponse,
-  CommandStatus,
-  DeviceListResponse,
-} from "@remote-control-hub/contracts";
+import type { CommandStatus } from "@remote-control-hub/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLoaderData, useSearchParams } from "react-router";
+import type { CommandsLoaderData } from "../app/loaders.js";
 import { getDeviceControl } from "../components/device-controls.js";
 import { PageHeader } from "../components/PageHeader.js";
 import { API_CLIENT } from "../lib/api-client.js";
 import { formatDateTime } from "../lib/date-time.js";
-
-type CommandsData = CommandBatchListResponse & DeviceListResponse;
 
 const STATUS_LABELS: Readonly<Record<CommandStatus, string>> = {
   accepted: "已接受",
@@ -31,12 +26,12 @@ const TERMINAL_STATUSES: readonly CommandStatus[] = [
 ];
 
 export function CommandsPage() {
-  const loaded = useLoaderData() as CommandsData;
+  const loaded = useLoaderData() as CommandsLoaderData;
   const [batchState, setBatchState] = useState({
     base: loaded.batches,
     current: loaded.batches,
   });
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(!loaded.historyAvailable);
   const [searchParams] = useSearchParams();
   const selectedBatch = searchParams.get("batch");
   const deviceNames = useMemo(
@@ -86,10 +81,24 @@ export function CommandsPage() {
       />
       {failed ? (
         <p className="status-warning mb-4" role="status">
-          实时刷新暂不可用，当前显示最近一次成功查询的结果。
+          命令历史暂不可用；其他页面仍可使用，请稍后重试。
         </p>
       ) : null}
-      {batches.length === 0 ? (
+      {failed && batches.length === 0 ? (
+        <section className="surface-card p-8 text-center">
+          <h2 className="font-semibold">无法读取命令历史</h2>
+          <p className="text-muted mt-1 text-sm">
+            服务恢复后可在此页重试，不会自动重复提交任何命令。
+          </p>
+          <button
+            className="button-primary mt-4"
+            onClick={() => void refresh()}
+            type="button"
+          >
+            重新加载
+          </button>
+        </section>
+      ) : batches.length === 0 ? (
         <section className="surface-card p-8 text-center">
           <h2 className="font-semibold">暂无命令</h2>
           <p className="text-muted mt-1 text-sm">

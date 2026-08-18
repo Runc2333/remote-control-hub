@@ -24,7 +24,9 @@ mod implementation {
 
     use crate::binding::LocalBindingStore;
     use crate::identity::{IdentityStore, MachineIdentity};
-    use crate::network::{CommandExecutor, ExecutionResult, register};
+    use crate::network::{
+        CommandExecutor, ExecutionResult, register, unregister as unregister_remote,
+    };
 
     pub const PIPE_NAME: &str = r"\\.\pipe\RemoteControlHub.Agent.v2";
     const COMMAND_TIMEOUT: Duration = Duration::from_secs(15);
@@ -245,7 +247,7 @@ mod implementation {
                                 identity_store.as_ref(),
                                 binding_store.as_ref(),
                                 &identity_sender,
-                            )
+                            ).await
                             .err();
                             write_message(&mut pipe, &IpcMessage::UnregistrationResponse(
                                 UnregistrationResponse {
@@ -353,11 +355,17 @@ mod implementation {
         }
     }
 
-    fn unregister(
+    async fn unregister(
         identity_store: &IdentityStore,
         binding_store: &LocalBindingStore,
         identity_sender: &watch::Sender<Option<MachineIdentity>>,
     ) -> Result<(), String> {
+        if let Some(identity) = identity_store
+            .load()
+            .map_err(|_| "identity_load_failed".to_owned())?
+        {
+            unregister_remote(&identity).await?;
+        }
         identity_store
             .clear()
             .map_err(|_| "identity_clear_failed".to_owned())?;

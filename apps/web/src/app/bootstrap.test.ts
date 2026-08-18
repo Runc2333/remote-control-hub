@@ -4,7 +4,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { API_CLIENT } from "../lib/api-client.js";
 import { administratorLoader, authenticatedLoader } from "./bootstrap.js";
-import { registrationModeLoader } from "./loaders.js";
+import { commandsLoader, registrationModeLoader } from "./loaders.js";
 
 const SESSION: Session = {
   authStrength: "password",
@@ -74,6 +74,21 @@ describe("注册策略兼容", () => {
 
     await expect(registrationModeLoader()).rejects.toMatchObject({
       status: 503,
+    });
+  });
+});
+
+describe("命令历史兼容", () => {
+  it("命令服务暂不可用时保留可渲染的页面数据", async () => {
+    vi.spyOn(API_CLIENT, "getCommandBatches").mockRejectedValue(
+      new ApiError(503),
+    );
+    vi.spyOn(API_CLIENT, "getDevices").mockResolvedValue({ devices: [] });
+
+    await expect(commandsLoader()).resolves.toEqual({
+      batches: [],
+      devices: [],
+      historyAvailable: false,
     });
   });
 });

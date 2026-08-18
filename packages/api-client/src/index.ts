@@ -272,6 +272,14 @@ export class ApiClient {
     return this.#request<DeviceListResponse>("/api/v1/devices");
   }
 
+  public async deleteDevice(deviceId: string): Promise<void> {
+    await this.#mutate<{ success: true }>(
+      `/api/v1/devices/${encodeURIComponent(deviceId)}`,
+      undefined,
+      "DELETE",
+    );
+  }
+
   public createEnrollmentToken(): Promise<CreateEnrollmentTokenResponse> {
     return this.#mutation<CreateEnrollmentTokenResponse>(
       "/api/v1/enrollment-tokens",

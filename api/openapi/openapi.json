@@ -39,6 +39,24 @@
         }
       }
     },
+    "/api/v1/agent/registration": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Unregistered agent"
+          }
+        }
+      }
+    },
+    "/api/v1/agent/registration/challenge": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Agent unregistration challenge"
+          }
+        }
+      }
+    },
     "/api/v1/auth/csrf": {
       "get": {
         "responses": {
@@ -80,6 +98,15 @@
         "responses": {
           "200": {
             "description": "Owned devices"
+          }
+        }
+      }
+    },
+    "/api/v1/devices/{deviceId}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Unregistered device"
           }
         }
       }

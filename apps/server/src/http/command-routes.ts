@@ -270,7 +270,11 @@ export const commandRoutes: FastifyPluginAsync<CommandRoutesOptions> = async (
             status: command.status,
           })),
         };
-      } catch {
+      } catch (error: unknown) {
+        fastify.log.error(
+          { error, requestId: request.id, userId: session.userId },
+          "command_batch_get_failed",
+        );
         return reply
           .code(503)
           .send(
@@ -327,7 +331,11 @@ export const commandRoutes: FastifyPluginAsync<CommandRoutesOptions> = async (
             };
           }),
         };
-      } catch {
+      } catch (error: unknown) {
+        fastify.log.error(
+          { error, requestId: request.id, userId: session.userId },
+          "command_batch_list_failed",
+        );
         return reply
           .code(503)
           .send(
