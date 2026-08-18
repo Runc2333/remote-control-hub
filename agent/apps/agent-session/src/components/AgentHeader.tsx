@@ -6,7 +6,7 @@ import { Icon } from "@remote-control-hub/ui";
 import type { AgentStatus } from "../types.js";
 
 type AgentHeaderProps = {
-  status?: AgentStatus;
+  status?: AgentStatus | undefined;
   statusError: boolean;
 };
 

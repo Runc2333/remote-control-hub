@@ -9,7 +9,7 @@ import type { UpdateCheck } from "../types.js";
 type UpdateNoticeProps = {
   onOpenRelease: () => Promise<void>;
   onSkip: () => Promise<void>;
-  updateCheck?: UpdateCheck;
+  updateCheck?: UpdateCheck | undefined;
 };
 
 export const UpdateNotice = ({

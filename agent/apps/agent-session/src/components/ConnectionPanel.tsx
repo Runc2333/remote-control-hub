@@ -9,15 +9,15 @@ import { useState } from "react";
 import type { AgentMutation, AgentStatus } from "../types.js";
 
 type ConnectionPanelProps = {
-  error?: string;
-  mutation?: AgentMutation;
+  error?: string | undefined;
+  mutation?: AgentMutation | undefined;
   onRefresh: () => Promise<void>;
   onRegister: (
     serviceOrigin: string,
     enrollmentToken: string,
   ) => Promise<boolean>;
   onUnregister: () => Promise<void>;
-  status?: AgentStatus;
+  status?: AgentStatus | undefined;
   statusError: boolean;
 };
 

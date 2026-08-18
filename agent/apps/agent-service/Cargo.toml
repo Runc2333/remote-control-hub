@@ -1,13 +1,13 @@
 [package]
 name = "agent-service"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license.workspace = true
 
 [dependencies]
-agent-core = { version = "0.2.0", path = "../../crates/agent-core" }
-agent-ipc-protocol = { version = "0.2.0", path = "../../crates/agent-ipc-protocol" }
-agent-wire = { version = "0.2.0", path = "../../crates/agent-wire" }
+agent-core = { version = "0.2.1", path = "../../crates/agent-core" }
+agent-ipc-protocol = { version = "0.2.1", path = "../../crates/agent-ipc-protocol" }
+agent-wire = { version = "0.2.1", path = "../../crates/agent-wire" }
 base64 = "0.23.1"
 ed25519-dalek = "3.0.0"
 futures-util = "0.3.34"
@@ -20,7 +20,7 @@ time = { version = "0.3.55", features = ["formatting", "parsing"] }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "time", "sync", "net", "io-util"] }
 tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-native-roots"] }
 url = "2.5.8"
-windows-platform = { version = "0.2.0", path = "../../crates/windows-platform" }
+windows-platform = { version = "0.2.1", path = "../../crates/windows-platform" }
 
 [target."cfg(windows)".dependencies]
 windows-service = "0.8.1"

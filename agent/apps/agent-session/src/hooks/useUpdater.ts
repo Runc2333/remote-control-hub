@@ -8,17 +8,17 @@ import type {
 } from "../types.js";
 
 export type UpdaterController = {
-  appInfo?: AppInfo;
+  appInfo: AppInfo | undefined;
   checkForUpdates: (force: boolean) => Promise<void>;
-  error?: string;
+  error: string | undefined;
   loadLogs: () => Promise<void>;
-  logs?: DiagnosticLog[];
+  logs: DiagnosticLog[] | undefined;
   openRelease: () => Promise<void>;
   pending: boolean;
   skipCurrentUpdate: () => Promise<void>;
   toggleAutomaticChecks: () => Promise<void>;
-  updateCheck?: UpdateCheck;
-  updateSettings?: UpdateSettings;
+  updateCheck: UpdateCheck | undefined;
+  updateSettings: UpdateSettings | undefined;
 };
 
 export const useUpdater = (): UpdaterController => {

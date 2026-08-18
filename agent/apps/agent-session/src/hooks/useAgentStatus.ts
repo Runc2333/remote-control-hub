@@ -3,14 +3,14 @@ import { useCallback, useEffect, useState } from "react";
 import type { AgentMutation, AgentStatus } from "../types.js";
 
 type AgentStatusController = {
-  mutation?: AgentMutation;
-  mutationError?: string;
+  mutation: AgentMutation | undefined;
+  mutationError: string | undefined;
   refreshStatus: () => Promise<void>;
   register: (
     serviceOrigin: string,
     enrollmentToken: string,
   ) => Promise<boolean>;
-  status?: AgentStatus;
+  status: AgentStatus | undefined;
   statusError: boolean;
   unregister: () => Promise<void>;
 };
