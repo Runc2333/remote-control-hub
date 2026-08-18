@@ -14,8 +14,7 @@ type LoginPanelProps = {
   onLoggedIn: () => void;
 };
 
-const INPUT_CLASS =
-  "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950";
+const INPUT_CLASS = "input-field";
 
 export function LoginPanel({ apiClient, onLoggedIn }: LoginPanelProps) {
   const [identifierType, setIdentifierType] = useState<"email" | "phone">(
@@ -93,14 +92,14 @@ export function LoginPanel({ apiClient, onLoggedIn }: LoginPanelProps) {
   };
 
   return (
-    <section className="mx-auto w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="surface-card mx-auto w-full max-w-md p-5 shadow-sm">
       <div className="flex items-center gap-3">
         <span className="grid size-10 place-items-center rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300">
           <Icon icon={faRightToBracket} label="登录" />
         </span>
         <div>
           <h2 className="font-semibold">登录控制中心</h2>
-          <p className="text-sm text-slate-500">使用邮箱或国际手机号</p>
+          <p className="text-muted text-sm">使用邮箱或国际手机号</p>
         </div>
       </div>
       {stage === "password-change" ? (
@@ -156,7 +155,7 @@ export function LoginPanel({ apiClient, onLoggedIn }: LoginPanelProps) {
             完成登录
           </button>
           <button
-            className="min-h-11 w-full rounded-lg border border-slate-300 px-4 text-sm font-medium dark:border-slate-700"
+            className="button-secondary w-full"
             onClick={() => {
               setSecondFactorCode("");
               setUseRecoveryCode((current) => !current);
@@ -221,7 +220,7 @@ export function LoginPanel({ apiClient, onLoggedIn }: LoginPanelProps) {
             {stage === "submitting" ? "正在验证…" : "登录"}
           </button>
           <button
-            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 font-medium disabled:opacity-50 dark:border-slate-700"
+            className="button-secondary w-full"
             disabled={stage === "submitting"}
             onClick={() => void loginWithPasskey()}
             type="button"
@@ -230,7 +229,7 @@ export function LoginPanel({ apiClient, onLoggedIn }: LoginPanelProps) {
             使用 Passkey 登录
           </button>
           {stage === "failed" && (
-            <p className="text-sm text-red-700" role="alert">
+            <p className="status-error" role="alert">
               登录失败，请检查登录标识和密码。
             </p>
           )}

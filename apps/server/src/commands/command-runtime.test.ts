@@ -124,6 +124,7 @@ describe("command runtime", () => {
     const persistence: CommandPersistence = {
       findBatch: vi.fn(async () => undefined),
       findBatchById: vi.fn(async () => undefined),
+      listBatches: vi.fn(async () => []),
       loadRecoverable: vi.fn(async () => [
         {
           batchId: "33333333-3333-4333-8333-333333333333",
@@ -151,5 +152,22 @@ describe("command runtime", () => {
         type: "command.execute",
       }),
     );
+  });
+
+  it("lists persisted batches only through the owner-scoped repository call", async () => {
+    const fixture = createFixture(false);
+    const listBatches = vi.fn(async () => []);
+    const persistence: CommandPersistence = {
+      findBatch: vi.fn(async () => undefined),
+      findBatchById: vi.fn(async () => undefined),
+      listBatches,
+      loadRecoverable: vi.fn(async () => []),
+      saveBatch: vi.fn(async () => undefined),
+      updateCommand: vi.fn(async () => undefined),
+    };
+    const runtime = new CommandRuntime(fixture.devices, undefined, persistence);
+
+    await expect(runtime.listBatches(OWNER_ID, 50)).resolves.toEqual([]);
+    expect(listBatches).toHaveBeenCalledWith(OWNER_ID, 50);
   });
 });

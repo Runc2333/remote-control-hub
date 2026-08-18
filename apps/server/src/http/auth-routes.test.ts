@@ -7,6 +7,7 @@ import type { AuthRuntime } from "../auth/auth-runtime.js";
 import type { StoredSession } from "../auth/session-store.js";
 import { buildApp } from "../app.js";
 import { AuditQueryService } from "../audit/audit-query-service.js";
+import type { CommandRuntime } from "../commands/command-runtime.js";
 
 const APP_ORIGIN = "https://hub.example.com";
 const SESSION_TOKEN = "opaque-session-token";
@@ -587,6 +588,74 @@ describe("authentication routes", () => {
       "user-1",
       CURRENT_SESSION.id,
     );
+  });
+
+  it("exposes only the public registration mode without authentication", async () => {
+    const runtime = createRuntime();
+    const app = buildApp(await createConfig(true), {
+      createAuditService,
+      createAuthRuntime: () => runtime,
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/registration",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ mode: "closed" });
+    expect(runtime.sessions.authenticate).not.toHaveBeenCalled();
+  });
+
+  it("lists recent command batches within the authenticated owner scope", async () => {
+    const runtime = createRuntime();
+    const listBatches = vi.fn(async () => [
+      {
+        batchId: "33333333-3333-4333-8333-333333333333",
+        commands: [
+          {
+            batchId: "33333333-3333-4333-8333-333333333333",
+            commandId: "44444444-4444-4444-8444-444444444444",
+            commandType: "display.turn_off" as const,
+            createdAt: "2026-08-17T00:00:00.000Z",
+            deviceId: "55555555-5555-4555-8555-555555555555",
+            expiresAt: "2026-08-17T00:00:30.000Z",
+            initiatedByUserId: "user-1",
+            ownerUserId: "user-1",
+            sequence: 1,
+            status: "succeeded" as const,
+          },
+        ],
+        createdAt: "2026-08-17T00:00:00.000Z",
+        ownerUserId: "user-1",
+        requestDigest: "a".repeat(64),
+      },
+    ]);
+    const app = buildApp(await createConfig(true), {
+      createAuditService,
+      createAuthRuntime: () => runtime,
+      createCommandRuntime: () =>
+        ({ listBatches }) as unknown as CommandRuntime,
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      headers: { cookie: `rch_session=${SESSION_TOKEN}` },
+      method: "GET",
+      url: "/api/v1/command-batches?limit=25",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      batches: [
+        {
+          commandType: "display.turn_off",
+          results: [{ status: "succeeded" }],
+        },
+      ],
+    });
+    expect(listBatches).toHaveBeenCalledWith("user-1", 25);
   });
 
   it("allows only an administrator to change the registration policy", async () => {

@@ -30,8 +30,8 @@ fn show_main_window(app: &AppHandle) -> tauri::Result<()> {
 
     WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("Remote Control Hub Agent")
-        .inner_size(680.0, 720.0)
-        .min_inner_size(360.0, 560.0)
+        .inner_size(820.0, 720.0)
+        .min_inner_size(420.0, 560.0)
         .build()?;
     Ok(())
 }
@@ -72,6 +72,11 @@ async fn get_agent_status(
     service_client: tauri::State<'_, ServiceClient>,
 ) -> Result<AgentStatus, String> {
     service_client.status().await
+}
+
+#[tauri::command]
+async fn unregister_agent(service_client: tauri::State<'_, ServiceClient>) -> Result<(), String> {
+    service_client.unregister().await
 }
 
 #[tauri::command]
@@ -174,6 +179,12 @@ pub fn run() {
                 .build(app)?;
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             execute_local_command,
             check_for_updates,
@@ -184,7 +195,8 @@ pub fn run() {
             open_release_page,
             register_agent,
             set_automatic_update_checks,
-            skip_update
+            skip_update,
+            unregister_agent
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Remote Control Hub Agent");

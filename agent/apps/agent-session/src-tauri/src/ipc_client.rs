@@ -97,6 +97,26 @@ impl ServiceClient {
         })
     }
 
+    pub async fn unregister(&self) -> Result<(), String> {
+        let correlation_id = self.next_correlation();
+        let response = self
+            .request(
+                correlation_id.clone(),
+                IpcMessage::UnregistrationRequest {
+                    protocol_version: IPC_PROTOCOL_VERSION,
+                    correlation_id,
+                },
+            )
+            .await?;
+        let IpcMessage::UnregistrationResponse(response) = response else {
+            return Err("unregistration_response_invalid".to_owned());
+        };
+        if let Some(error) = response.error_code {
+            return Err(error);
+        }
+        Ok(())
+    }
+
     async fn request(
         &self,
         correlation_id: String,
@@ -233,7 +253,9 @@ mod platform {
                             let response = execute_command(request);
                             write_message(&mut writer, &IpcMessage::CommandResponse(response)).await?;
                         }
-                        response @ (IpcMessage::RegistrationResponse(_) | IpcMessage::StatusResponse(_)) => {
+                        response @ (IpcMessage::RegistrationResponse(_)
+                            | IpcMessage::UnregistrationResponse(_)
+                            | IpcMessage::StatusResponse(_)) => {
                             let Some(request) = pending.take() else {
                                 break Err("ipc_response_unexpected".to_owned());
                             };
@@ -293,6 +315,7 @@ mod platform {
     fn response_correlation(message: &IpcMessage) -> Option<&str> {
         match message {
             IpcMessage::RegistrationResponse(value) => Some(&value.correlation_id),
+            IpcMessage::UnregistrationResponse(value) => Some(&value.correlation_id),
             IpcMessage::StatusResponse(value) => Some(&value.correlation_id),
             _ => None,
         }

@@ -1,6 +1,10 @@
 .git
 .github
 .husky
+api
+artifacts
+assets
+deploy
 **/dist
 **/node_modules
 **/target

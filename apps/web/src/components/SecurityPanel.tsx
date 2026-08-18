@@ -24,8 +24,7 @@ type SecurityPanelProps = {
   apiClient: ApiClient;
 };
 
-const INPUT_CLASS =
-  "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950";
+const INPUT_CLASS = "input-field";
 
 export function SecurityPanel({ apiClient }: SecurityPanelProps) {
   const [status, setStatus] = useState<TotpStatusResponse | undefined>();
@@ -183,18 +182,18 @@ export function SecurityPanel({ apiClient }: SecurityPanelProps) {
   };
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <section className="surface-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
             <Icon icon={faShieldHalved} />
             增强认证
           </h2>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="text-muted mt-1 text-xs">
             TOTP 是推荐的可选保护，不启用也不会限制现有功能。
           </p>
         </div>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium dark:bg-slate-800">
+        <span className="status-badge-neutral">
           {status?.enabled ? "TOTP 已启用" : "TOTP 未启用"}
         </span>
       </div>
@@ -221,7 +220,7 @@ export function SecurityPanel({ apiClient }: SecurityPanelProps) {
           </button>
         </div>
         {passkeys.length === 0 ? (
-          <p className="mt-3 text-xs text-slate-500">尚未注册 Passkey。</p>
+          <p className="text-muted mt-3 text-xs">尚未注册 Passkey。</p>
         ) : (
           <ul className="mt-3 divide-y divide-slate-200 text-sm dark:divide-slate-800">
             {passkeys.map((passkey) => (
@@ -231,7 +230,7 @@ export function SecurityPanel({ apiClient }: SecurityPanelProps) {
               >
                 <span>{passkey.name}</span>
                 <span className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">
+                  <span className="text-muted text-xs">
                     {passkey.deviceType === "multiDevice" ? "可同步" : "单设备"}
                     {passkey.backedUp ? " · 已备份" : ""}
                   </span>
@@ -243,7 +242,7 @@ export function SecurityPanel({ apiClient }: SecurityPanelProps) {
                     <Icon icon={faPen} label={`重命名 ${passkey.name}`} />
                   </button>
                   <button
-                    className="grid size-11 place-items-center rounded-lg border border-slate-300 text-red-700 dark:border-slate-700"
+                    className="button-icon text-red-700 dark:text-red-300"
                     onClick={() => void deletePasskey(passkey)}
                     type="button"
                   >
@@ -271,7 +270,7 @@ export function SecurityPanel({ apiClient }: SecurityPanelProps) {
               重新生成恢复码
             </button>
             <button
-              className="min-h-11 rounded-lg border border-red-300 px-3 text-sm font-medium text-red-700 dark:border-red-900"
+              className="button-danger"
               onClick={() => void disableTotp()}
               type="button"
             >
@@ -311,7 +310,7 @@ export function SecurityPanel({ apiClient }: SecurityPanelProps) {
               用身份验证器扫描二维码，然后输入当前 6
               位验证码。密钥只在本次流程显示。
             </p>
-            <code className="block overflow-x-auto rounded bg-slate-100 px-3 py-2 text-xs dark:bg-slate-950">
+            <code className="surface-muted block overflow-x-auto px-3 py-2 text-xs">
               {enrollment.secret}
             </code>
             <label className="block text-sm font-medium">
@@ -376,10 +375,7 @@ export function SecurityPanel({ apiClient }: SecurityPanelProps) {
       )}
 
       {error !== undefined && (
-        <p
-          className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800"
-          role="alert"
-        >
+        <p className="status-error mt-3" role="alert">
           {error}
         </p>
       )}

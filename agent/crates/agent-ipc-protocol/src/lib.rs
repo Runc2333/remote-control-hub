@@ -40,6 +40,14 @@ pub struct RegistrationResponse {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct UnregistrationResponse {
+    pub protocol_version: u16,
+    pub correlation_id: String,
+    pub error_code: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct StatusResponse {
     pub protocol_version: u16,
     pub correlation_id: String,
@@ -96,6 +104,11 @@ pub enum IpcMessage {
     SessionHelloAck(SessionHelloAck),
     RegistrationRequest(RegistrationRequest),
     RegistrationResponse(RegistrationResponse),
+    UnregistrationRequest {
+        protocol_version: u16,
+        correlation_id: String,
+    },
+    UnregistrationResponse(UnregistrationResponse),
     StatusRequest {
         protocol_version: u16,
         correlation_id: String,
@@ -207,5 +220,16 @@ mod tests {
             decode_frame(&[0xff, 0xff, 0xff, 0xff]),
             Err("ipc_frame_invalid")
         );
+    }
+
+    #[test]
+    fn frames_unregistration_messages() {
+        let message = IpcMessage::UnregistrationRequest {
+            protocol_version: IPC_PROTOCOL_VERSION,
+            correlation_id: "correlation".to_owned(),
+        };
+        let frame = encode_frame(&message).unwrap();
+
+        assert_eq!(decode_frame(&frame), Ok(message));
     }
 }

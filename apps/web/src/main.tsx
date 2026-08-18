@@ -19,24 +19,26 @@ createRoot(root).render(
   </StrictMode>,
 );
 
-void registerServiceWorker().catch((error: unknown) => {
-  const failure = createUpdateFailure(error, {
-    code:
-      error instanceof Error
-        ? error.message
-        : "service_worker_registration_failed",
-    phase: "worker_registration",
-    userAgent: navigator.userAgent,
+if (import.meta.env.PROD) {
+  void registerServiceWorker().catch((error: unknown) => {
+    const failure = createUpdateFailure(error, {
+      code:
+        error instanceof Error
+          ? error.message
+          : "service_worker_registration_failed",
+      phase: "worker_registration",
+      userAgent: navigator.userAgent,
+    });
+    sessionStorage.setItem(UPDATE_FAILURE_STORAGE_KEY, JSON.stringify(failure));
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("rch-update", {
+          detail: {
+            ...failure,
+            type: "UPDATE_FAILED",
+          },
+        }),
+      );
+    }, 0);
   });
-  sessionStorage.setItem(UPDATE_FAILURE_STORAGE_KEY, JSON.stringify(failure));
-  window.setTimeout(() => {
-    window.dispatchEvent(
-      new CustomEvent("rch-update", {
-        detail: {
-          ...failure,
-          type: "UPDATE_FAILED",
-        },
-      }),
-    );
-  }, 0);
-});
+}

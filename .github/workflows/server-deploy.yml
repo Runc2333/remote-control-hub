@@ -34,8 +34,8 @@ jobs:
       - name: Build server image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
         with:
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=server
+          cache-to: type=gha,mode=max,scope=server
           context: .
           load: true
           platforms: linux/amd64

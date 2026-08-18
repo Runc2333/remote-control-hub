@@ -15,6 +15,7 @@ import type {
   AuditEventListResponse,
   AuditEventQuery,
   CommandBatchResponse,
+  CommandBatchListResponse,
   CompleteSetupRequest,
   ConfirmedActionRequest,
   CreateCommandBatchRequest,
@@ -237,6 +238,12 @@ export class ApiClient {
     return this.#mutation<{ userId: string }>("/api/v1/auth/register", request);
   }
 
+  public getPublicRegistrationMode(): Promise<{ mode: RegistrationMode }> {
+    return this.#request<{ mode: RegistrationMode }>(
+      "/api/v1/auth/registration",
+    );
+  }
+
   public getSessions(): Promise<SessionListResponse> {
     return this.#request<SessionListResponse>("/api/v1/auth/sessions");
   }
@@ -250,6 +257,14 @@ export class ApiClient {
     return this.#mutation<{ revokedCount: number }>(
       "/api/v1/auth/sessions/revoke-others",
       {},
+    );
+  }
+
+  public async revokeSession(sessionId: string): Promise<void> {
+    await this.#mutate<{ success: true }>(
+      `/api/v1/auth/sessions/${encodeURIComponent(sessionId)}`,
+      undefined,
+      "DELETE",
     );
   }
 
@@ -412,6 +427,13 @@ export class ApiClient {
   public getCommandBatch(batchId: string): Promise<CommandBatchResponse> {
     return this.#request<CommandBatchResponse>(
       `/api/v1/command-batches/${encodeURIComponent(batchId)}`,
+    );
+  }
+
+  public getCommandBatches(limit = 50): Promise<CommandBatchListResponse> {
+    const parameters = new URLSearchParams({ limit: String(limit) });
+    return this.#request<CommandBatchListResponse>(
+      `/api/v1/command-batches?${parameters.toString()}`,
     );
   }
 

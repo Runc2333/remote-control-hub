@@ -76,6 +76,10 @@ type RecoverableCommandRow = CommandRow & {
   ownerUserId: string;
 };
 
+type ListedCommandRow = RecoverableCommandRow & {
+  requestDigest: Buffer;
+};
+
 export type RecoverableCommand = CoordinatedCommand;
 
 export type CommandPersistence = {
@@ -87,6 +91,10 @@ export type CommandPersistence = {
     ownerUserId: string,
     batchId: string,
   ) => Promise<CoordinatedBatch | undefined>;
+  listBatches: (
+    ownerUserId: string,
+    limit: number,
+  ) => Promise<CoordinatedBatch[]>;
   loadRecoverable: () => Promise<RecoverableCommand[]>;
   saveBatch: (batch: CoordinatedBatch, idempotencyKey: string) => Promise<void>;
   updateCommand: (command: CoordinatedCommand) => Promise<void>;
@@ -238,6 +246,48 @@ export class MySqlCommandPersistence implements CommandPersistence {
         ownerUserId: batch.ownerUserId,
         requestDigest: batch.requestDigest.toString("hex"),
       };
+    } finally {
+      await connection.end();
+    }
+  }
+
+  public async listBatches(
+    ownerUserId: string,
+    limit: number,
+  ): Promise<CoordinatedBatch[]> {
+    const connection = await createConnection(connectionOptions(this.#config));
+    try {
+      const [rows] = await connection.execute<ListedCommandRow[]>(
+        "SELECT cb.id AS batchId, cb.owner_user_id AS ownerUserId, cb.initiated_by_user_id AS initiatedByUserId, cb.command_type AS commandType, cb.request_digest AS requestDigest, cb.created_at AS createdAt, c.id AS commandId, c.device_id AS deviceId, c.device_sequence AS deviceSequence, c.status, c.expires_at AS expiresAt, (SELECT cr.error_code FROM command_results cr WHERE cr.command_id = c.id ORDER BY cr.id DESC LIMIT 1) AS errorCode FROM (SELECT id, owner_user_id, initiated_by_user_id, command_type, request_digest, created_at FROM command_batches WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT ?) cb INNER JOIN commands c ON c.batch_id = cb.id ORDER BY cb.created_at DESC, c.device_sequence",
+        [ownerUserId, limit],
+      );
+      const batches = new Map<string, CoordinatedBatch>();
+      for (const row of rows) {
+        const errorCode = parseErrorCode(row.errorCode);
+        const createdAt = toIsoDateTime(row.createdAt);
+        const batch = batches.get(row.batchId) ?? {
+          batchId: row.batchId,
+          commands: [],
+          createdAt,
+          ownerUserId: row.ownerUserId,
+          requestDigest: row.requestDigest.toString("hex"),
+        };
+        batch.commands.push({
+          batchId: row.batchId,
+          commandId: row.commandId,
+          commandType: parseCommandType(row.commandType),
+          createdAt,
+          deviceId: row.deviceId,
+          ...(errorCode === undefined ? {} : { errorCode }),
+          expiresAt: toIsoDateTime(row.expiresAt),
+          initiatedByUserId: row.initiatedByUserId,
+          ownerUserId: row.ownerUserId,
+          sequence: row.deviceSequence,
+          status: parseCommandStatus(row.status),
+        });
+        batches.set(row.batchId, batch);
+      }
+      return [...batches.values()];
     } finally {
       await connection.end();
     }

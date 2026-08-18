@@ -125,13 +125,16 @@ async fn run_agent(mut shutdown: tokio::sync::watch::Receiver<bool>) -> Result<(
         Arc::clone(&connected),
         shutdown.clone(),
     ));
+    let mut network_shutdown_sender = None;
     let mut network_task = identity.map(|identity| {
+        let (sender, network_shutdown) = tokio::sync::watch::channel(false);
+        network_shutdown_sender = Some(sender);
         tokio::spawn(network::run_reconnecting(
             identity,
             Arc::clone(&ledger),
             Arc::clone(&router) as Arc<dyn network::CommandExecutor>,
             Arc::clone(&connected),
-            shutdown.clone(),
+            network_shutdown,
         ))
     });
     loop {
@@ -141,21 +144,33 @@ async fn run_agent(mut shutdown: tokio::sync::watch::Receiver<bool>) -> Result<(
                     break;
                 }
             }
-            changed = identity_receiver.changed(), if network_task.is_none() => {
+            changed = identity_receiver.changed() => {
                 if changed.is_err() {
                     return Err("identity_channel_closed".to_owned());
                 }
+                if let Some(sender) = network_shutdown_sender.take() {
+                    let _ = sender.send(true);
+                }
+                if let Some(task) = network_task.take() {
+                    let _ = task.await;
+                }
+                connected.store(false, std::sync::atomic::Ordering::Release);
                 if let Some(identity) = identity_receiver.borrow().clone() {
+                    let (sender, network_shutdown) = tokio::sync::watch::channel(false);
+                    network_shutdown_sender = Some(sender);
                     network_task = Some(tokio::spawn(network::run_reconnecting(
                         identity,
                         Arc::clone(&ledger),
                         Arc::clone(&router) as Arc<dyn network::CommandExecutor>,
                         Arc::clone(&connected),
-                        shutdown.clone(),
+                        network_shutdown,
                     )));
                 }
             }
         }
+    }
+    if let Some(sender) = network_shutdown_sender {
+        let _ = sender.send(true);
     }
     if let Some(task) = network_task {
         let _ = task.await;

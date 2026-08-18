@@ -1,4 +1,6 @@
 import {
+  COMMAND_BATCH_LIST_QUERY_SCHEMA,
+  COMMAND_BATCH_LIST_RESPONSE_SCHEMA,
   COMMAND_BATCH_RESPONSE_SCHEMA,
   COMMAND_BATCH_PARAMS_SCHEMA,
   CREATE_COMMAND_BATCH_REQUEST_SCHEMA,
@@ -6,6 +8,7 @@ import {
   ERROR_RESPONSE_SCHEMA,
   type CreateCommandBatchRequest,
   type CommandBatchParams,
+  type CommandBatchListQuery,
 } from "@remote-control-hub/contracts";
 import type {
   FastifyPluginAsync,
@@ -266,6 +269,63 @@ export const commandRoutes: FastifyPluginAsync<CommandRoutesOptions> = async (
               : { errorCode: command.errorCode }),
             status: command.status,
           })),
+        };
+      } catch {
+        return reply
+          .code(503)
+          .send(
+            errorResponse(
+              request,
+              "command_service_unavailable",
+              "命令服务暂不可用",
+            ),
+          );
+      }
+    },
+  );
+  fastify.get<{ Querystring: CommandBatchListQuery }>(
+    "/api/v1/command-batches",
+    {
+      onRequest: [requireInstalled, requireConfiguration],
+      schema: {
+        params: EMPTY_OBJECT_SCHEMA,
+        querystring: COMMAND_BATCH_LIST_QUERY_SCHEMA,
+        response: {
+          200: COMMAND_BATCH_LIST_RESPONSE_SCHEMA,
+          401: ERROR_RESPONSE_SCHEMA,
+          503: ERROR_RESPONSE_SCHEMA,
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireSession(request, reply);
+      if (session === undefined) {
+        return;
+      }
+      try {
+        const batches = await options
+          .getCommandRuntime()
+          .listBatches(session.userId, request.query.limit ?? 50);
+        return {
+          batches: batches.map((batch) => {
+            const first = batch.commands[0];
+            if (first === undefined) {
+              throw new Error("command_batch_invalid");
+            }
+            return {
+              batchId: batch.batchId,
+              commandType: first.commandType,
+              createdAt: batch.createdAt,
+              results: batch.commands.map((command) => ({
+                commandId: command.commandId,
+                deviceId: command.deviceId,
+                ...(command.errorCode === undefined
+                  ? {}
+                  : { errorCode: command.errorCode }),
+                status: command.status,
+              })),
+            };
+          }),
         };
       } catch {
         return reply

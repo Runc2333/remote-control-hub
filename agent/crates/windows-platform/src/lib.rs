@@ -770,24 +770,28 @@ impl DesktopControl for PlatformDesktopControl {
             APPCOMMAND_VOLUME_MUTE, APPCOMMAND_VOLUME_UP,
         };
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetShellWindow, HWND_BROADCAST, PostMessageW, SC_MONITORPOWER, SendMessageW,
-            WM_APPCOMMAND, WM_SYSCOMMAND,
+            GetForegroundWindow, HWND_BROADCAST, SC_MONITORPOWER, SMTO_ABORTIFHUNG,
+            SendMessageTimeoutW, SendMessageW, WM_APPCOMMAND, WM_SYSCOMMAND,
         };
 
-        fn post_app_command(command: u32) -> bool {
-            let shell_window = unsafe { GetShellWindow() };
-            if shell_window.is_invalid() {
+        fn send_app_command(command: u32) -> bool {
+            let target_window = unsafe { GetForegroundWindow() };
+            if target_window.is_invalid() {
                 return false;
             }
+
             unsafe {
-                PostMessageW(
-                    Some(shell_window),
+                SendMessageTimeoutW(
+                    target_window,
                     WM_APPCOMMAND,
-                    WPARAM(0),
+                    WPARAM(target_window.0 as usize),
                     LPARAM((command as isize) << 16),
+                    SMTO_ABORTIFHUNG,
+                    1_000,
+                    None,
                 )
             }
-            .is_ok()
+            .0 != 0
         }
 
         let dispatched = match command {
@@ -800,15 +804,15 @@ impl DesktopControl for PlatformDesktopControl {
                 );
                 true
             },
-            DesktopCommand::MediaVolumeUp => post_app_command(APPCOMMAND_VOLUME_UP.0),
-            DesktopCommand::MediaVolumeDown => post_app_command(APPCOMMAND_VOLUME_DOWN.0),
-            DesktopCommand::MediaVolumeMuteToggle => post_app_command(APPCOMMAND_VOLUME_MUTE.0),
-            DesktopCommand::MediaPlayPause => post_app_command(APPCOMMAND_MEDIA_PLAY_PAUSE.0),
+            DesktopCommand::MediaVolumeUp => send_app_command(APPCOMMAND_VOLUME_UP.0),
+            DesktopCommand::MediaVolumeDown => send_app_command(APPCOMMAND_VOLUME_DOWN.0),
+            DesktopCommand::MediaVolumeMuteToggle => send_app_command(APPCOMMAND_VOLUME_MUTE.0),
+            DesktopCommand::MediaPlayPause => send_app_command(APPCOMMAND_MEDIA_PLAY_PAUSE.0),
             DesktopCommand::MediaPreviousTrack => {
-                post_app_command(APPCOMMAND_MEDIA_PREVIOUSTRACK.0)
+                send_app_command(APPCOMMAND_MEDIA_PREVIOUSTRACK.0)
             }
-            DesktopCommand::MediaNextTrack => post_app_command(APPCOMMAND_MEDIA_NEXTTRACK.0),
-            DesktopCommand::MediaStop => post_app_command(APPCOMMAND_MEDIA_STOP.0),
+            DesktopCommand::MediaNextTrack => send_app_command(APPCOMMAND_MEDIA_NEXTTRACK.0),
+            DesktopCommand::MediaStop => send_app_command(APPCOMMAND_MEDIA_STOP.0),
         };
 
         ExecutionReceipt {

@@ -10,8 +10,7 @@ type StepUpPanelProps = {
   onComplete?: () => void;
 };
 
-const INPUT_CLASS =
-  "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950";
+const INPUT_CLASS = "input-field";
 
 export function StepUpPanel({ apiClient, onComplete }: StepUpPanelProps) {
   const [password, setPassword] = useState("");
@@ -52,7 +51,7 @@ export function StepUpPanel({ apiClient, onComplete }: StepUpPanelProps) {
   };
 
   return (
-    <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+    <section className="status-warning">
       <h2 className="flex items-center gap-2 font-semibold">
         <Icon icon={faKey} />
         重新验证身份

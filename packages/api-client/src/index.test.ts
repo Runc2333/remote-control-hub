@@ -108,4 +108,59 @@ describe("ApiClient", () => {
       }),
     );
   });
+
+  it("lists persisted command batches", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ batches: [] }), { status: 200 }),
+      );
+    const client = new ApiClient({ baseUrl: "https://hub.example.com", fetch });
+
+    await expect(client.getCommandBatches(30)).resolves.toEqual({
+      batches: [],
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://hub.example.com/api/v1/command-batches?limit=30",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("reads the public registration mode", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ mode: "open" }), { status: 200 }),
+      );
+    const client = new ApiClient({ baseUrl: "https://hub.example.com", fetch });
+
+    await expect(client.getPublicRegistrationMode()).resolves.toEqual({
+      mode: "open",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://hub.example.com/api/v1/auth/registration",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("revokes one selected browser session", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ csrfToken: "csrf-token" }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), { status: 200 }),
+      );
+    const client = new ApiClient({ baseUrl: "https://hub.example.com", fetch });
+
+    await client.revokeSession("11111111-1111-4111-8111-111111111111");
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      "https://hub.example.com/api/v1/auth/sessions/11111111-1111-4111-8111-111111111111",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
 });

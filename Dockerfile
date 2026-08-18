@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM node:22.22.1-bookworm-slim@sha256:4f77a690f2f8946ab16fe1e791a3ac0667ae1c3575c3e4d0d4589e9ed5bfaf3d AS build
 
 ENV PNPM_HOME=/pnpm
@@ -7,7 +9,11 @@ WORKDIR /workspace
 
 RUN corepack enable && corepack prepare pnpm@10.30.3 --activate
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
+  pnpm fetch --frozen-lockfile
+
+COPY package.json tsconfig.json ./
 COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
@@ -15,14 +21,16 @@ COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/eslint-config/package.json packages/eslint-config/package.json
 COPY packages/tsconfig/package.json packages/tsconfig/package.json
 COPY packages/ui/package.json packages/ui/package.json
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
+  pnpm install --frozen-lockfile --offline
 
 COPY VERSION ./VERSION
 COPY apps/server apps/server
 COPY apps/web apps/web
 COPY packages packages
 COPY scripts scripts
-RUN pnpm --filter @remote-control-hub/contracts build \
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store,sharing=locked \
+  pnpm --filter @remote-control-hub/contracts build \
   && pnpm --filter @remote-control-hub/api-client build \
   && pnpm --filter @remote-control-hub/ui build \
   && pnpm --filter @remote-control-hub/server build \

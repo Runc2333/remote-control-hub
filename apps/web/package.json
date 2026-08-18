@@ -20,7 +20,8 @@
     "@simplewebauthn/browser": "^13.3.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router": "^8.3.0"
   },
   "devDependencies": {
     "@remote-control-hub/tsconfig": "workspace:*",

@@ -2121,6 +2121,37 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
     },
   );
 
+  fastify.get(
+    "/api/v1/auth/registration",
+    {
+      onRequest: [requireInstalled, requireAuthConfiguration],
+      schema: {
+        params: EMPTY_OBJECT_SCHEMA,
+        querystring: EMPTY_OBJECT_SCHEMA,
+        response: {
+          200: REGISTRATION_MODE_RESPONSE_SCHEMA,
+          404: ERROR_RESPONSE_SCHEMA,
+          503: ERROR_RESPONSE_SCHEMA,
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        return { mode: await getRuntime().accounts.getRegistrationMode() };
+      } catch {
+        return reply
+          .code(503)
+          .send(
+            errorResponse(
+              request,
+              "registration_unavailable",
+              "注册服务暂不可用",
+            ),
+          );
+      }
+    },
+  );
+
   fastify.post<{ Body: RegisterRequest }>(
     "/api/v1/auth/register",
     {

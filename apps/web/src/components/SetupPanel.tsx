@@ -17,8 +17,7 @@ type SetupPanelProps = {
   onComplete: () => void;
 };
 
-const INPUT_CLASS =
-  "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950";
+const INPUT_CLASS = "input-field";
 
 export function SetupPanel({
   apiClient,
@@ -118,12 +117,12 @@ export function SetupPanel({
   };
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="surface-card p-4 shadow-sm">
       <div className="flex items-center gap-3">
         <Icon icon={faServer} label="数据服务" />
         <div>
           <h2 className="font-semibold">数据服务检测</h2>
-          <p className="text-sm text-slate-500">
+          <p className="text-muted text-sm">
             {deploymentMode === "compose"
               ? "使用 Compose 内部 MySQL 与 Redis，目标不可由浏览器修改。"
               : "分别验证 MySQL 与 Redis，两项成功后才能继续安装。"}
@@ -189,7 +188,7 @@ export function SetupPanel({
       )}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <button
-          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 font-medium disabled:opacity-50 dark:border-slate-700"
+          className="button-secondary"
           disabled={setupSecret.length < 16 || mysqlState === "testing"}
           onClick={() => void testMysql()}
           type="button"
@@ -198,7 +197,7 @@ export function SetupPanel({
           MySQL：{mysqlState}
         </button>
         <button
-          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 font-medium disabled:opacity-50 dark:border-slate-700"
+          className="button-secondary"
           disabled={setupSecret.length < 16 || redisState === "testing"}
           onClick={() => void testRedis()}
           type="button"
@@ -292,7 +291,7 @@ export function SetupPanel({
               </label>
             </div>
             <p
-              className="text-xs text-slate-500"
+              className="text-muted text-xs"
               id="administrator-password-requirements"
             >
               密码至少 12 个字符，并且两次输入必须完全一致。
@@ -305,7 +304,7 @@ export function SetupPanel({
               {completionState === "testing" ? "正在完成安装…" : "完成安装"}
             </button>
             {completionState === "failed" && completionError !== undefined && (
-              <p className="text-sm text-red-700" role="alert">
+              <p className="status-error" role="alert">
                 {completionError}
               </p>
             )}

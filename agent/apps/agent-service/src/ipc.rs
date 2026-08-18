@@ -10,7 +10,7 @@ mod implementation {
     use agent_ipc_protocol::{
         CommandOutcome, CommandRequest, CommandResponse, IPC_PROTOCOL_VERSION, IpcCommand,
         IpcMessage, MAX_IPC_MESSAGE_BYTES, RegistrationRequest, RegistrationResponse,
-        SessionHelloAck, StatusResponse, decode_frame, encode_frame,
+        SessionHelloAck, StatusResponse, UnregistrationResponse, decode_frame, encode_frame,
     };
     use agent_wire::{AgentCommand, CommandErrorCode, CommandStatus, CommandType};
     use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -234,6 +234,27 @@ mod implementation {
                             }).await;
                             write_message(&mut pipe, &IpcMessage::RegistrationResponse(response)).await?;
                         }
+                        IpcMessage::UnregistrationRequest { protocol_version, correlation_id } => {
+                            if protocol_version != IPC_PROTOCOL_VERSION
+                                || correlation_id.is_empty()
+                                || correlation_id.len() > 128
+                            {
+                                break Err("unregistration_request_invalid".to_owned());
+                            }
+                            let error_code = unregister(
+                                identity_store.as_ref(),
+                                binding_store.as_ref(),
+                                &identity_sender,
+                            )
+                            .err();
+                            write_message(&mut pipe, &IpcMessage::UnregistrationResponse(
+                                UnregistrationResponse {
+                                    protocol_version: IPC_PROTOCOL_VERSION,
+                                    correlation_id,
+                                    error_code,
+                                },
+                            )).await?;
+                        }
                         IpcMessage::StatusRequest { protocol_version, correlation_id } => {
                             if protocol_version != IPC_PROTOCOL_VERSION
                                 || correlation_id.is_empty()
@@ -330,6 +351,22 @@ mod implementation {
                 error_code: Some(error_code.to_owned()),
             },
         }
+    }
+
+    fn unregister(
+        identity_store: &IdentityStore,
+        binding_store: &LocalBindingStore,
+        identity_sender: &watch::Sender<Option<MachineIdentity>>,
+    ) -> Result<(), String> {
+        identity_store
+            .clear()
+            .map_err(|_| "identity_clear_failed".to_owned())?;
+        binding_store
+            .clear()
+            .map_err(|_| "binding_clear_failed".to_owned())?;
+        identity_sender
+            .send(None)
+            .map_err(|_| "agent_runtime_unavailable".to_owned())
     }
 
     fn allowed_user_sid(binding_store: &LocalBindingStore) -> Result<String, String> {

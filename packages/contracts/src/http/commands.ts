@@ -53,6 +53,23 @@ export const COMMAND_BATCH_RESPONSE_SCHEMA = Type.Object(
   },
   { additionalProperties: false },
 );
+export const COMMAND_BATCH_SUMMARY_SCHEMA = Type.Object(
+  {
+    batchId: Type.String({ format: "uuid" }),
+    commandType: DEVICE_CAPABILITY_SCHEMA,
+    createdAt: ISO_DATE_TIME_SCHEMA,
+    results: Type.Array(COMMAND_RESULT_SCHEMA, { maxItems: 100 }),
+  },
+  { additionalProperties: false },
+);
+export const COMMAND_BATCH_LIST_QUERY_SCHEMA = Type.Object(
+  { limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })) },
+  { additionalProperties: false },
+);
+export const COMMAND_BATCH_LIST_RESPONSE_SCHEMA = Type.Object(
+  { batches: Type.Array(COMMAND_BATCH_SUMMARY_SCHEMA, { maxItems: 100 }) },
+  { additionalProperties: false },
+);
 export const COMMAND_BATCH_PARAMS_SCHEMA = Type.Object(
   { batchId: Type.String({ format: "uuid" }) },
   { additionalProperties: false },
@@ -61,6 +78,13 @@ export const COMMAND_BATCH_PARAMS_SCHEMA = Type.Object(
 export type CommandErrorCode = Static<typeof COMMAND_ERROR_CODE_SCHEMA>;
 export type CommandStatus = Static<typeof COMMAND_STATUS_SCHEMA>;
 export type CommandBatchResponse = Static<typeof COMMAND_BATCH_RESPONSE_SCHEMA>;
+export type CommandBatchSummary = Static<typeof COMMAND_BATCH_SUMMARY_SCHEMA>;
+export type CommandBatchListQuery = Static<
+  typeof COMMAND_BATCH_LIST_QUERY_SCHEMA
+>;
+export type CommandBatchListResponse = Static<
+  typeof COMMAND_BATCH_LIST_RESPONSE_SCHEMA
+>;
 export type CommandBatchParams = Static<typeof COMMAND_BATCH_PARAMS_SCHEMA>;
 export type CreateCommandBatchRequest = Static<
   typeof CREATE_COMMAND_BATCH_REQUEST_SCHEMA

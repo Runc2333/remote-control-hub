@@ -108,6 +108,14 @@ export class CommandRuntime {
     return this.#persistence?.findBatchById(ownerUserId, batchId);
   }
 
+  public async listBatches(
+    ownerUserId: string,
+    limit: number,
+  ): Promise<CoordinatedBatch[]> {
+    await this.#ready;
+    return this.#persistence?.listBatches(ownerUserId, limit) ?? [];
+  }
+
   public async onDeviceConnected(deviceId: string): Promise<void> {
     await this.#ready;
     await this.#dispatch(deviceId);

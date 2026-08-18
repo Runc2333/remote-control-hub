@@ -12,6 +12,7 @@
       DowngradeErrorMessage="已安装更新版本的 Remote Control Hub Agent。"
     />
     <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AgentShortcut.exe" SourceFile="$(var.AgentIconPath)" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Remote Control Hub Agent">
@@ -51,6 +52,7 @@
               Directory="ProgramMenuFolder"
               Name="Remote Control Hub Agent"
               Description="打开 Remote Control Hub Agent"
+              Icon="AgentShortcut.exe"
               WorkingDirectory="INSTALLFOLDER"
             />
           </File>
