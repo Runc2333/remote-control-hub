@@ -101,6 +101,7 @@ jobs:
         shell: pwsh
         run: |
           dotnet tool restore
+          dotnet tool run wix -- extension add -g WixToolset.Util.wixext/7.0.0
           pnpm version:check
           $version = (Get-Content -LiteralPath "VERSION" -Raw).Trim()
           cargo build --manifest-path agent/Cargo.toml --workspace --exclude agent-session --exclude agent-bootstrapper --locked --release --target x86_64-pc-windows-msvc
@@ -109,7 +110,7 @@ jobs:
           $session = (Resolve-Path -LiteralPath "agent/target/x86_64-pc-windows-msvc/release/agent-session.exe").Path
           $icon = (Resolve-Path -LiteralPath "agent/apps/agent-session/src-tauri/icons/icon.ico").Path
           $msi = "agent/target/x86_64-pc-windows-msvc/release/remote-control-hub-agent.msi"
-          dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$version" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -d "AgentIconPath=$icon" -out $msi
+          dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -ext WixToolset.Util.wixext -d "ProductVersion=$version" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -d "AgentIconPath=$icon" -out $msi
           dotnet tool run wix -- msi validate -acceptEula wix7 $msi
           $webView2 = "agent/target/x86_64-pc-windows-msvc/release/MicrosoftEdgeWebview2Setup.exe"
           Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $webView2

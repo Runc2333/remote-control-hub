@@ -1,4 +1,7 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix
+  xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+>
   <Package
     Name="Remote Control Hub Agent"
     Manufacturer="Remote Control Hub"
@@ -13,6 +16,17 @@
     />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="AgentShortcut.exe" SourceFile="$(var.AgentIconPath)" />
+    <util:CloseApplication
+      Id="CloseAgentSession"
+      Target="agent-session.exe"
+      CloseMessage="yes"
+      EndSessionMessage="yes"
+      ElevatedCloseMessage="yes"
+      ElevatedEndSessionMessage="yes"
+      Timeout="5"
+      TerminateProcess="0"
+      RebootPrompt="no"
+    />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Remote Control Hub Agent">

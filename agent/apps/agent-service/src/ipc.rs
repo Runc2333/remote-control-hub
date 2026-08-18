@@ -180,14 +180,14 @@ mod implementation {
         identity_sender: watch::Sender<Option<MachineIdentity>>,
         connected: Arc<AtomicBool>,
     ) -> Result<(), String> {
-        let handle = pipe.as_raw_handle();
-        let actual_user_sid = named_pipe_client_user_sid(handle).map_err(str::to_owned)?;
-        let actual_process_id = named_pipe_client_process_id(handle).map_err(str::to_owned)?;
         let hello = match read_message(&mut pipe).await? {
             IpcMessage::SessionHello(value) => value,
             _ => return Err("session_hello_required".to_owned()),
         };
         hello.validate().map_err(str::to_owned)?;
+        let handle = pipe.as_raw_handle();
+        let actual_user_sid = named_pipe_client_user_sid(handle).map_err(str::to_owned)?;
+        let actual_process_id = named_pipe_client_process_id(handle).map_err(str::to_owned)?;
         if hello.process_id != actual_process_id || hello.claimed_user_sid != actual_user_sid {
             return Err("local_user_mismatch".to_owned());
         }

@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-bootstrapper"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "sha2 0.11.0",
  "tempfile",
@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "agent-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "agent-wire",
  "serde",
@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "agent-ipc-protocol"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "agent-service"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "agent-core",
  "agent-ipc-protocol",
@@ -59,7 +59,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "agent-ipc-protocol",
  "reqwest",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "agent-wire"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -5180,7 +5180,7 @@ dependencies = [
 
 [[package]]
 name = "windows-platform"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "windows 0.62.2",
 ]

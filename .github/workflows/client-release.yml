@@ -84,10 +84,11 @@ jobs:
         shell: pwsh
         run: |
           dotnet tool restore
+          dotnet tool run wix -- extension add -g WixToolset.Util.wixext/7.0.0
           $service = (Resolve-Path -LiteralPath "artifacts/components/agent-service.exe").Path
           $session = (Resolve-Path -LiteralPath "artifacts/components/agent-session.exe").Path
           $icon = (Resolve-Path -LiteralPath "agent/apps/agent-session/src-tauri/icons/icon.ico").Path
-          dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -d "ProductVersion=$env:VERSION" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -d "AgentIconPath=$icon" -out "artifacts/components/remote-control-hub-agent.msi"
+          dotnet tool run wix -- build -acceptEula wix7 "agent/installer/wix/Package.wxs" -arch x64 -ext WixToolset.Util.wixext -d "ProductVersion=$env:VERSION" -d "AgentServicePath=$service" -d "AgentSessionPath=$session" -d "AgentIconPath=$icon" -out "artifacts/components/remote-control-hub-agent.msi"
           dotnet tool run wix -- msi validate -acceptEula wix7 "artifacts/components/remote-control-hub-agent.msi"
       - name: Build self-contained unsigned installer
         shell: pwsh
