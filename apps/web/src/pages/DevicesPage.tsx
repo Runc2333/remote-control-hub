@@ -5,11 +5,15 @@ import type {
 } from "@remote-control-hub/contracts";
 import { Icon } from "@remote-control-hub/ui";
 import { useMemo, useState } from "react";
-import { Link, useLoaderData, useNavigate, useRevalidator } from "react-router";
+import { Link, useLoaderData, useRevalidator } from "react-router";
 import { DEVICE_CONTROLS } from "../components/device-controls.js";
 import { PageHeader } from "../components/PageHeader.js";
 import { API_CLIENT } from "../lib/api-client.js";
 import { formatDateTime } from "../lib/date-time.js";
+
+type PageMessage =
+  | { batchId: string; kind: "success"; text: string }
+  | { kind: "error"; text: string };
 
 export function DevicesPage() {
   const { devices } = useLoaderData() as DeviceListResponse;
@@ -17,8 +21,7 @@ export function DevicesPage() {
   const [commandType, setCommandType] =
     useState<DeviceCapability>("display.turn_off");
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState<string>();
-  const navigate = useNavigate();
+  const [message, setMessage] = useState<PageMessage>();
   const revalidator = useRevalidator();
   const selectedDevices = useMemo(
     () => devices.filter((device) => selected.has(device.id)),
@@ -33,7 +36,10 @@ export function DevicesPage() {
 
   const toggle = (deviceId: string): void => {
     if (!selected.has(deviceId) && selected.size >= 100) {
-      setMessage("单次批量操作最多选择 100 台设备。");
+      setMessage({
+        kind: "error",
+        text: "单次批量操作最多选择 100 台设备。",
+      });
       return;
     }
     setSelected((current) => {
@@ -49,7 +55,10 @@ export function DevicesPage() {
 
   const sendBatch = async (): Promise<void> => {
     if (validTargets.length === 0) {
-      setMessage("请选择至少一台在线且支持该操作的设备。");
+      setMessage({
+        kind: "error",
+        text: "请选择至少一台在线且支持该操作的设备。",
+      });
       return;
     }
     if (
@@ -60,6 +69,7 @@ export function DevicesPage() {
     ) {
       return;
     }
+    setMessage(undefined);
     setPending(true);
     try {
       const batch = await API_CLIENT.createCommand({
@@ -67,9 +77,17 @@ export function DevicesPage() {
         deviceIds: validTargets.map((device) => device.id),
         idempotencyKey: crypto.randomUUID(),
       });
-      await navigate(`/commands?batch=${encodeURIComponent(batch.batchId)}`);
+      setSelected(new Set<string>());
+      setMessage({
+        batchId: batch.batchId,
+        kind: "success",
+        text: "命令已提交。",
+      });
     } catch {
-      setMessage("命令未能提交，请检查设备状态后重试。");
+      setMessage({
+        kind: "error",
+        text: "命令未能提交，请检查设备状态后重试。",
+      });
     } finally {
       setPending(false);
     }
@@ -143,9 +161,20 @@ export function DevicesPage() {
               已选择 {selected.size} 台；离线或不支持该操作的设备会自动排除。
             </p>
             {message === undefined ? null : (
-              <p className="status-error mt-3" role="alert">
-                {message}
-              </p>
+              <div
+                className={`${message.kind === "success" ? "status-success" : "status-error"} mt-3`}
+                role={message.kind === "success" ? "status" : "alert"}
+              >
+                {message.text}
+                {message.kind === "success" ? (
+                  <Link
+                    className="ml-2 font-semibold underline underline-offset-4"
+                    to={`/commands?batch=${encodeURIComponent(message.batchId)}`}
+                  >
+                    查看命令状态
+                  </Link>
+                ) : null}
+              </div>
             )}
           </section>
           <div className="grid gap-3 lg:grid-cols-2">

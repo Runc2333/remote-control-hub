@@ -8,10 +8,14 @@ import { PageHeader } from "../components/PageHeader.js";
 import { API_CLIENT } from "../lib/api-client.js";
 import { formatDateTime } from "../lib/date-time.js";
 
+type PageMessage =
+  | { batchId: string; kind: "success"; text: string }
+  | { kind: "error"; text: string };
+
 export function DeviceDetailPage() {
   const device = useLoaderData() as Device;
   const [pending, setPending] = useState<string>();
-  const [message, setMessage] = useState<string>();
+  const [message, setMessage] = useState<PageMessage>();
   const navigate = useNavigate();
 
   const send = async (
@@ -23,6 +27,7 @@ export function DeviceDetailPage() {
     ) {
       return;
     }
+    setMessage(undefined);
     setPending(capability);
     try {
       const batch = await API_CLIENT.createCommand({
@@ -30,9 +35,13 @@ export function DeviceDetailPage() {
         deviceIds: [device.id],
         idempotencyKey: crypto.randomUUID(),
       });
-      await navigate(`/commands?batch=${encodeURIComponent(batch.batchId)}`);
+      setMessage({
+        batchId: batch.batchId,
+        kind: "success",
+        text: "命令已提交。",
+      });
     } catch {
-      setMessage("命令未能提交，请稍后重试。");
+      setMessage({ kind: "error", text: "命令未能提交，请稍后重试。" });
     } finally {
       setPending(undefined);
     }
@@ -52,7 +61,7 @@ export function DeviceDetailPage() {
       await API_CLIENT.deleteDevice(device.id);
       await navigate("/devices", { replace: true });
     } catch {
-      setMessage("设备解绑失败，请稍后重试。");
+      setMessage({ kind: "error", text: "设备解绑失败，请稍后重试。" });
     } finally {
       setPending(undefined);
     }
@@ -111,9 +120,20 @@ export function DeviceDetailPage() {
           ))}
         </div>
         {message === undefined ? null : (
-          <p className="status-error mt-4" role="alert">
-            {message}
-          </p>
+          <div
+            className={`${message.kind === "success" ? "status-success" : "status-error"} mt-4`}
+            role={message.kind === "success" ? "status" : "alert"}
+          >
+            {message.text}
+            {message.kind === "success" ? (
+              <Link
+                className="ml-2 font-semibold underline underline-offset-4"
+                to={`/commands?batch=${encodeURIComponent(message.batchId)}`}
+              >
+                查看命令状态
+              </Link>
+            ) : null}
+          </div>
         )}
       </section>
       <section className="surface-card mt-4 border-red-200 p-4 dark:border-red-900">
