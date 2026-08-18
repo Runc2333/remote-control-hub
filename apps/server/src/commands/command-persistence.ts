@@ -80,7 +80,17 @@ type ListedCommandRow = RecoverableCommandRow & {
   requestDigest: Buffer;
 };
 
+type DeviceSequenceRow = RowDataPacket & {
+  deviceId: string;
+  deviceSequence: number | string;
+};
+
 export type RecoverableCommand = CoordinatedCommand;
+
+export type PersistedDeviceSequence = {
+  deviceId: string;
+  sequence: number;
+};
 
 export type CommandPersistence = {
   findBatch: (
@@ -95,6 +105,7 @@ export type CommandPersistence = {
     ownerUserId: string,
     limit: number,
   ) => Promise<CoordinatedBatch[]>;
+  loadDeviceSequences: () => Promise<PersistedDeviceSequence[]>;
   loadRecoverable: () => Promise<RecoverableCommand[]>;
   saveBatch: (batch: CoordinatedBatch, idempotencyKey: string) => Promise<void>;
   updateCommand: (command: CoordinatedCommand) => Promise<void>;
@@ -314,6 +325,24 @@ export class MySqlCommandPersistence implements CommandPersistence {
           sequence: command.deviceSequence,
           status: parseCommandStatus(command.status),
         };
+      });
+    } finally {
+      await connection.end();
+    }
+  }
+
+  public async loadDeviceSequences(): Promise<PersistedDeviceSequence[]> {
+    const connection = await createConnection(connectionOptions(this.#config));
+    try {
+      const [rows] = await connection.query<DeviceSequenceRow[]>(
+        "SELECT device_id AS deviceId, MAX(device_sequence) AS deviceSequence FROM commands GROUP BY device_id",
+      );
+      return rows.map((row) => {
+        const sequence = Number(row.deviceSequence);
+        if (!Number.isSafeInteger(sequence) || sequence < 1) {
+          throw new Error("command_record_invalid");
+        }
+        return { deviceId: row.deviceId, sequence };
       });
     } finally {
       await connection.end();

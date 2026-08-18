@@ -73,6 +73,19 @@ describe("CommandCoordinator", () => {
     );
   });
 
+  it("continues the persisted device sequence after a restart", () => {
+    const coordinator = createCoordinator();
+    coordinator.restoreDeviceSequence(DEVICE_ID, 7);
+
+    const batch = coordinator.createBatch(OWNER_ID, {
+      commandType: "display.turn_off",
+      deviceIds: [DEVICE_ID],
+      idempotencyKey: "idempotency-key-0005",
+    });
+
+    expect(batch.commands[0]?.sequence).toBe(8);
+  });
+
   it("enforces ownership without revealing the device", () => {
     const coordinator = createCoordinator();
 

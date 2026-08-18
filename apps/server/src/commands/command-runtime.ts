@@ -162,9 +162,18 @@ export class CommandRuntime {
   }
 
   async #recover(): Promise<void> {
-    const commands = await this.#persistence?.loadRecoverable();
-    if (commands === undefined) {
+    if (this.#persistence === undefined) {
       return;
+    }
+    const [commands, deviceSequences] = await Promise.all([
+      this.#persistence.loadRecoverable(),
+      this.#persistence.loadDeviceSequences(),
+    ]);
+    for (const deviceSequence of deviceSequences) {
+      this.#coordinator.restoreDeviceSequence(
+        deviceSequence.deviceId,
+        deviceSequence.sequence,
+      );
     }
     for (const command of commands) {
       this.#coordinator.restore(command);

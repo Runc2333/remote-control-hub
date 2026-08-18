@@ -165,6 +165,16 @@ export class CommandCoordinator {
     }
   }
 
+  public restoreDeviceSequence(deviceId: string, sequence: number): void {
+    if (!Number.isSafeInteger(sequence) || sequence < 1) {
+      throw new Error("command_record_invalid");
+    }
+    this.#sequences.set(
+      deviceId,
+      Math.max(this.#sequences.get(deviceId) ?? 0, sequence),
+    );
+  }
+
   public handleAgentResult(
     deviceId: string,
     commandId: string,

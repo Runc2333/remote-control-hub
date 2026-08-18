@@ -126,6 +126,9 @@ describe("command runtime", () => {
       findBatch: vi.fn(async () => undefined),
       findBatchById: vi.fn(async () => undefined),
       listBatches: vi.fn(async () => []),
+      loadDeviceSequences: vi.fn(async () => [
+        { deviceId: DEVICE_ID, sequence: 7 },
+      ]),
       loadRecoverable: vi.fn(async () => [
         {
           batchId: "33333333-3333-4333-8333-333333333333",
@@ -162,6 +165,7 @@ describe("command runtime", () => {
       findBatch: vi.fn(async () => undefined),
       findBatchById: vi.fn(async () => undefined),
       listBatches,
+      loadDeviceSequences: vi.fn(async () => []),
       loadRecoverable: vi.fn(async () => []),
       saveBatch: vi.fn(async () => undefined),
       updateCommand: vi.fn(async () => undefined),
@@ -170,5 +174,36 @@ describe("command runtime", () => {
 
     await expect(runtime.listBatches(OWNER_ID, 50)).resolves.toEqual([]);
     expect(listBatches).toHaveBeenCalledWith(OWNER_ID, 50);
+  });
+
+  it("creates the next sequence after terminal command history", async () => {
+    const fixture = createFixture(true);
+    const saveBatch = vi.fn(async () => undefined);
+    const persistence: CommandPersistence = {
+      findBatch: vi.fn(async () => undefined),
+      findBatchById: vi.fn(async () => undefined),
+      listBatches: vi.fn(async () => []),
+      loadDeviceSequences: vi.fn(async () => [
+        { deviceId: DEVICE_ID, sequence: 12 },
+      ]),
+      loadRecoverable: vi.fn(async () => []),
+      saveBatch,
+      updateCommand: vi.fn(async () => undefined),
+    };
+    const runtime = new CommandRuntime(fixture.devices, undefined, persistence);
+
+    const batch = await runtime.createBatch(OWNER_ID, {
+      commandType: "display.turn_off",
+      deviceIds: [DEVICE_ID],
+      idempotencyKey: "idempotency-key-after-restart",
+    });
+
+    expect(batch.commands[0]?.sequence).toBe(13);
+    expect(saveBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commands: [expect.objectContaining({ sequence: 13 })],
+      }),
+      "idempotency-key-after-restart",
+    );
   });
 });

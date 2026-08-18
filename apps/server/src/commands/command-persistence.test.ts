@@ -85,4 +85,29 @@ describe("MySqlCommandPersistence", () => {
     ]);
     expect(MYSQL_MOCKS.end).toHaveBeenCalledOnce();
   });
+
+  it("loads the maximum persisted sequence for every device", async () => {
+    MYSQL_MOCKS.query.mockResolvedValue([
+      [
+        {
+          deviceId: "44444444-4444-4444-8444-444444444444",
+          deviceSequence: "12",
+        },
+      ],
+      [],
+    ]);
+
+    await expect(
+      new MySqlCommandPersistence(CONFIG).loadDeviceSequences(),
+    ).resolves.toEqual([
+      {
+        deviceId: "44444444-4444-4444-8444-444444444444",
+        sequence: 12,
+      },
+    ]);
+    expect(MYSQL_MOCKS.query).toHaveBeenCalledWith(
+      expect.stringContaining("MAX(device_sequence)"),
+    );
+    expect(MYSQL_MOCKS.end).toHaveBeenCalledOnce();
+  });
 });
