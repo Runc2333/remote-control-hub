@@ -152,11 +152,11 @@ export class SessionManager {
     ) {
       const updated = {
         ...session,
+        absoluteExpiresAt: new Date(
+          now.getTime() + this.#options.absoluteTtlMilliseconds,
+        ).toISOString(),
         idleExpiresAt: new Date(
-          Math.min(
-            now.getTime() + this.#options.idleTtlMilliseconds,
-            Date.parse(session.absoluteExpiresAt),
-          ),
+          now.getTime() + this.#options.idleTtlMilliseconds,
         ).toISOString(),
         lastActiveAt: now.toISOString(),
       };

@@ -22,6 +22,7 @@ import {
 import type { BootstrapData } from "../app/bootstrap.js";
 import { currentSession } from "../app/bootstrap.js";
 import { API_CLIENT } from "../lib/api-client.js";
+import { useSessionAutoRenewal } from "../hooks/use-session-auto-renewal.js";
 
 type NavigationItem = {
   end?: boolean;
@@ -56,6 +57,9 @@ export function AppLayout() {
   const session = currentSession(bootstrap);
   const navigation = useNavigation();
   const revalidator = useRevalidator();
+  
+  // Enable automatic session renewal
+  useSessionAutoRenewal();
 
   if (!bootstrap.setup.installed) {
     return <Navigate replace to="/setup" />;

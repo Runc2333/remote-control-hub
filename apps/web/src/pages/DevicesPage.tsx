@@ -1,12 +1,13 @@
 import { faKey, faRotate } from "@fortawesome/free-solid-svg-icons";
 import type {
+  Device,
   DeviceCapability,
   DeviceListResponse,
 } from "@remote-control-hub/contracts";
 import { Icon } from "@remote-control-hub/ui";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLoaderData, useRevalidator } from "react-router";
-import { DEVICE_CONTROLS } from "../components/device-controls.js";
+import { DEVICE_CONTROLS, type DeviceControl } from "../components/device-controls.js";
 import { PageHeader } from "../components/PageHeader.js";
 import { API_CLIENT } from "../lib/api-client.js";
 import { formatDateTime } from "../lib/date-time.js";
@@ -15,23 +16,82 @@ type PageMessage =
   | { batchId: string; kind: "success"; text: string }
   | { kind: "error"; text: string };
 
+type RemoteButtonProps = {
+  control: DeviceControl;
+  selectedDevices: readonly Device[];
+  pending: boolean;
+  onCommand: (capability: DeviceCapability) => void;
+};
+
+function RemoteButton({
+  control,
+  selectedDevices,
+  pending,
+  onCommand,
+}: RemoteButtonProps) {
+  const validTargets = selectedDevices.filter(
+    (device) => device.online && device.capabilities.includes(control.capability),
+  );
+  const isDisabled = pending || validTargets.length === 0;
+
+  return (
+    <button
+      className={`flex aspect-square flex-col items-center justify-center rounded-lg border-2 p-2 transition-all ${
+        isDisabled
+          ? "border-neutral-200 bg-neutral-50 text-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-500"
+          : "border-teal-200 bg-teal-50 text-teal-700 hover:border-teal-400 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-900/20 dark:text-teal-300 dark:hover:border-teal-600 dark:hover:bg-teal-900/40"
+      }`}
+      disabled={isDisabled}
+      onClick={() => void onCommand(control.capability)}
+      type="button"
+      title={`${control.label} (${validTargets.length} 台可用)`}
+    >
+      <Icon icon={control.icon} size="lg" />
+      <span className="mt-1 text-[10px] font-medium leading-tight">
+        {control.label}
+      </span>
+    </button>
+  );
+}
+
 export function DevicesPage() {
   const { devices } = useLoaderData() as DeviceListResponse;
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [commandType, setCommandType] =
-    useState<DeviceCapability>("display.turn_off");
+  
+  // Initialize selected devices from localStorage or auto-select first device
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => {
+    const saved = localStorage.getItem("selectedDevices");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return new Set(parsed);
+        }
+      } catch {
+        // Ignore invalid JSON
+      }
+    }
+    // Auto-select first device if only one exists
+    if (devices.length === 1) {
+      const firstDevice = devices[0];
+      if (firstDevice) {
+        localStorage.setItem("selectedDevices", JSON.stringify([firstDevice.id]));
+        return new Set([firstDevice.id]);
+      }
+    }
+    return new Set();
+  });
+  
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<PageMessage>();
   const revalidator = useRevalidator();
+
+  // Save selection to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("selectedDevices", JSON.stringify([...selected]));
+  }, [selected]);
   const selectedDevices = useMemo(
     () => devices.filter((device) => selected.has(device.id)),
     [devices, selected],
-  );
-  const control = DEVICE_CONTROLS.find(
-    (candidate) => candidate.capability === commandType,
-  );
-  const validTargets = selectedDevices.filter(
-    (device) => device.online && device.capabilities.includes(commandType),
   );
 
   const toggle = (deviceId: string): void => {
@@ -53,7 +113,11 @@ export function DevicesPage() {
     });
   };
 
-  const sendBatch = async (): Promise<void> => {
+  const sendCommand = async (commandType: DeviceCapability): Promise<void> => {
+    const validTargets = selectedDevices.filter(
+      (device) => device.online && device.capabilities.includes(commandType),
+    );
+
     if (validTargets.length === 0) {
       setMessage({
         kind: "error",
@@ -77,7 +141,7 @@ export function DevicesPage() {
         deviceIds: validTargets.map((device) => device.id),
         idempotencyKey: crypto.randomUUID(),
       });
-      setSelected(new Set<string>());
+      // Don't clear selection after command
       setMessage({
         batchId: batch.batchId,
         kind: "success",
@@ -130,39 +194,76 @@ export function DevicesPage() {
       ) : (
         <>
           <section className="surface-card mb-4 p-4">
-            <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
-              <label className="grid gap-1 text-sm font-medium">
-                批量操作
-                <select
-                  className="input-field"
-                  onChange={(event) =>
-                    setCommandType(event.target.value as DeviceCapability)
-                  }
-                  value={commandType}
-                >
-                  {DEVICE_CONTROLS.map((item) => (
-                    <option key={item.capability} value={item.capability}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                className="button-primary"
-                disabled={pending || validTargets.length === 0}
-                onClick={() => void sendBatch()}
-                type="button"
-              >
-                {control === undefined ? null : <Icon icon={control.icon} />}
-                {pending ? "正在提交…" : `向 ${validTargets.length} 台设备发送`}
-              </button>
+            <div className="mb-4">
+              <h3 className="font-semibold text-sm">遥控器控制面板</h3>
+              <p className="text-muted mt-1 text-xs">
+                已选择 {selected.size} 台设备；离线或不支持该操作的设备会自动排除。
+              </p>
             </div>
-            <p className="text-muted mt-2 text-xs">
-              已选择 {selected.size} 台；离线或不支持该操作的设备会自动排除。
-            </p>
+
+            {/* Remote Control 9-Grid Layout */}
+            <div className="mx-auto grid max-w-xs grid-cols-3 gap-2">
+              {/* Row 1 */}
+              <RemoteButton
+                control={DEVICE_CONTROLS[0]} // display.turn_off
+                selectedDevices={selectedDevices}
+                pending={pending}
+                onCommand={sendCommand}
+              />
+              <RemoteButton
+                control={DEVICE_CONTROLS[1]} // media.volume_up
+                selectedDevices={selectedDevices}
+                pending={pending}
+                onCommand={sendCommand}
+              />
+              <RemoteButton
+                control={DEVICE_CONTROLS[3]} // media.volume_mute_toggle
+                selectedDevices={selectedDevices}
+                pending={pending}
+                onCommand={sendCommand}
+              />
+              
+              {/* Row 2 */}
+              <RemoteButton
+                control={DEVICE_CONTROLS[5]} // media.previous_track
+                selectedDevices={selectedDevices}
+                pending={pending}
+                onCommand={sendCommand}
+              />
+              <div className="flex items-center justify-center">
+                <span className="text-muted text-xs">🎮</span>
+              </div>
+              <RemoteButton
+                control={DEVICE_CONTROLS[6]} // media.next_track
+                selectedDevices={selectedDevices}
+                pending={pending}
+                onCommand={sendCommand}
+              />
+              
+              {/* Row 3 */}
+              <RemoteButton
+                control={DEVICE_CONTROLS[7]} // media.stop
+                selectedDevices={selectedDevices}
+                pending={pending}
+                onCommand={sendCommand}
+              />
+              <RemoteButton
+                control={DEVICE_CONTROLS[2]} // media.volume_down
+                selectedDevices={selectedDevices}
+                pending={pending}
+                onCommand={sendCommand}
+              />
+              <RemoteButton
+                control={DEVICE_CONTROLS[4]} // media.play_pause
+                selectedDevices={selectedDevices}
+                pending={pending}
+                onCommand={sendCommand}
+              />
+            </div>
+
             {message === undefined ? null : (
               <div
-                className={`${message.kind === "success" ? "status-success" : "status-error"} mt-3`}
+                className={`${message.kind === "success" ? "status-success" : "status-error"} mt-4`}
                 role={message.kind === "success" ? "status" : "alert"}
               >
                 {message.text}
