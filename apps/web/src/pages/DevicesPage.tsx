@@ -204,61 +204,101 @@ export function DevicesPage() {
             {/* Remote Control 9-Grid Layout */}
             <div className="mx-auto grid max-w-xs grid-cols-3 gap-2">
               {/* Row 1 */}
-              <RemoteButton
-                control={DEVICE_CONTROLS[0]} // display.turn_off
-                selectedDevices={selectedDevices}
-                pending={pending}
-                onCommand={sendCommand}
-              />
-              <RemoteButton
-                control={DEVICE_CONTROLS[1]} // media.volume_up
-                selectedDevices={selectedDevices}
-                pending={pending}
-                onCommand={sendCommand}
-              />
-              <RemoteButton
-                control={DEVICE_CONTROLS[3]} // media.volume_mute_toggle
-                selectedDevices={selectedDevices}
-                pending={pending}
-                onCommand={sendCommand}
-              />
+              {(() => {
+                const control = DEVICE_CONTROLS.at(0);
+                return control ? (
+                  <RemoteButton
+                    control={control} // display.turn_off
+                    selectedDevices={selectedDevices}
+                    pending={pending}
+                    onCommand={sendCommand}
+                  />
+                ) : null;
+              })()}
+              {(() => {
+                const control = DEVICE_CONTROLS.at(1);
+                return control ? (
+                  <RemoteButton
+                    control={control} // media.volume_up
+                    selectedDevices={selectedDevices}
+                    pending={pending}
+                    onCommand={sendCommand}
+                  />
+                ) : null;
+              })()}
+              {(() => {
+                const control = DEVICE_CONTROLS.at(3);
+                return control ? (
+                  <RemoteButton
+                    control={control} // media.volume_mute_toggle
+                    selectedDevices={selectedDevices}
+                    pending={pending}
+                    onCommand={sendCommand}
+                  />
+                ) : null;
+              })()}
               
               {/* Row 2 */}
-              <RemoteButton
-                control={DEVICE_CONTROLS[5]} // media.previous_track
-                selectedDevices={selectedDevices}
-                pending={pending}
-                onCommand={sendCommand}
-              />
+              {(() => {
+                const control = DEVICE_CONTROLS.at(5);
+                return control ? (
+                  <RemoteButton
+                    control={control} // media.previous_track
+                    selectedDevices={selectedDevices}
+                    pending={pending}
+                    onCommand={sendCommand}
+                  />
+                ) : null;
+              })()}
               <div className="flex items-center justify-center">
                 <span className="text-muted text-xs">🎮</span>
               </div>
-              <RemoteButton
-                control={DEVICE_CONTROLS[6]} // media.next_track
-                selectedDevices={selectedDevices}
-                pending={pending}
-                onCommand={sendCommand}
-              />
+              {(() => {
+                const control = DEVICE_CONTROLS.at(6);
+                return control ? (
+                  <RemoteButton
+                    control={control} // media.next_track
+                    selectedDevices={selectedDevices}
+                    pending={pending}
+                    onCommand={sendCommand}
+                  />
+                ) : null;
+              })()}
               
               {/* Row 3 */}
-              <RemoteButton
-                control={DEVICE_CONTROLS[7]} // media.stop
-                selectedDevices={selectedDevices}
-                pending={pending}
-                onCommand={sendCommand}
-              />
-              <RemoteButton
-                control={DEVICE_CONTROLS[2]} // media.volume_down
-                selectedDevices={selectedDevices}
-                pending={pending}
-                onCommand={sendCommand}
-              />
-              <RemoteButton
-                control={DEVICE_CONTROLS[4]} // media.play_pause
-                selectedDevices={selectedDevices}
-                pending={pending}
-                onCommand={sendCommand}
-              />
+              {(() => {
+                const control = DEVICE_CONTROLS.at(7);
+                return control ? (
+                  <RemoteButton
+                    control={control} // media.stop
+                    selectedDevices={selectedDevices}
+                    pending={pending}
+                    onCommand={sendCommand}
+                  />
+                ) : null;
+              })()}
+              {(() => {
+                const control = DEVICE_CONTROLS.at(2);
+                return control ? (
+                  <RemoteButton
+                    control={control} // media.volume_down
+                    selectedDevices={selectedDevices}
+                    pending={pending}
+                    onCommand={sendCommand}
+                  />
+                ) : null;
+              })()}
+              {(() => {
+                const control = DEVICE_CONTROLS.at(4);
+                return control ? (
+                  <RemoteButton
+                    control={control} // media.play_pause
+                    selectedDevices={selectedDevices}
+                    pending={pending}
+                    onCommand={sendCommand}
+                  />
+                ) : null;
+              })()}
             </div>
 
             {message === undefined ? null : (
