@@ -42,6 +42,11 @@ jobs:
           provenance: false
           push: false
           tags: remote-control-hub-server:sha-${{ steps.commit.outputs.value }}
+      - name: Verify patched Node.js runtime
+        env:
+          COMMIT_SHA: ${{ steps.commit.outputs.value }}
+        run: |
+          docker run --rm --entrypoint node "remote-control-hub-server:sha-$COMMIT_SHA" -e 'const { strict: ASSERT } = require("node:assert"); ASSERT.equal(require("node:zlib").constants.BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH, -17); console.log(process.version);'
       - id: artifacts
         name: Package image and deployment bundle
         shell: bash
